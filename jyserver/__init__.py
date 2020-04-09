@@ -1,0 +1,595 @@
+'''
+Framework to simplify the creation of interactive websites by providing
+direct real-time DOM access using Pythonic syntax. The critical
+component is the JS class that dynamically constructs Javascript
+syntax from python syntax and then sends the statements for execution
+on the web browser. On the web browser, there is a corresponding class
+that dynamically converts Javascript syntax to Python and sends it
+to the server for evaluation.
+
+Self-contained example:
+-------------------------------
+class App(Client):
+    def __init__(self):
+        self.html = """
+            <p id="time">TIME</p>
+            <button id="reset" onclick="server.reset()">Reset</button>
+        """
+
+    def reset(self):
+        self.start0 = time.time()
+        self.js.dom.time.innerHTML = "{:.1f}".format(0)
+
+    def main(self):
+        self.start0 = time.time()
+        while True:
+            self.js.dom.time.innerHTML = "{:.1f}".format(time.time() - self.start0)
+            time.sleep(0.1)
+
+httpd = Server(App)
+print("serving at port", httpd.port)
+httpd.start()
+'''
+
+from socketserver import ThreadingTCPServer
+from http.server import SimpleHTTPRequestHandler
+from http.cookies import SimpleCookie
+from urllib.parse import urlparse, parse_qs, unquote
+
+import json
+import threading
+import queue
+import os
+import copy
+import re
+import time
+import uuid 
+
+#
+# This is the Javascript code that gets injected into the HTML
+# page.
+#
+# evalBrowser()     Queries the server for any pending commands. If
+#                   there are no pending commands, the connection 
+#                   is kept open by the server until a pending
+#                   command is issued, or a timeout. At the end of
+#                   the query, the function gets scheduled for execution
+#                   again.
+#
+# sendBrowser(e, q) Evaluate expression `e` and then send the results
+#                   to the server. This is used by the server to
+#                   resolve Javascript statements.
+#
+# server            Proxy class that is used by the web browser's
+#                   Javascript code to evaluate statements on
+#                   the server.
+#
+JSCRIPT = b"""
+    function evalBrowser() {
+        var request = new XMLHttpRequest();
+        request.onreadystatechange = function() {
+            if (request.readyState==4 && request.status==200){
+                try {
+                    // console.log(request.responseText)
+                    eval(request.responseText)
+                }
+                catch(e) {}
+                setTimeout(evalBrowser, 1);
+            }
+        }
+        request.open("GET", "/eval?session=" + UID);
+        request.send(null);
+    }
+    function sendBrowser(expression, query) {
+        var value
+        var error = ""
+        try {
+            value = eval(expression)
+        }
+        catch (e) {
+            value = 0
+            error = e.message 
+        }
+        var request = new XMLHttpRequest();
+        request.open("POST", "/state");
+        request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+        request.send(JSON.stringify({ "session": UID, "value": value, "query": query, "error": error}));
+    }
+    server  = new Proxy({}, { 
+        get : function(target, property) { 
+            return function(...args) {
+                var request = new XMLHttpRequest();
+                request.open("POST", "/run", false);
+                request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+                request.send(JSON.stringify({ "function": property, "session": UID, "args": args }));
+                if (request.status === 200) {
+                    var result = JSON.parse(request.responseText)
+                    return result
+                }
+            }            
+        }
+    });
+    evalBrowser()
+"""
+
+class Client:
+    '''
+    Client class contains all methods and code that is executed on the
+    server and browser. Users of this library should inherit this class
+    and implement methods. There are three types of methods:
+
+    Atributes
+    ------------
+    home
+        Optional filename to send when "/" is requested
+    html
+        Optional HTML to send when "/" is requested. If neither
+        `home` nor `html` are set, then it will send "index.html"
+
+    Methods
+    -----------
+    main(self)
+        If this is implemented, then the server will
+        begin execution of this function immediately.
+        The server will terminate when this function
+        terminates.
+
+    page(self)
+        When the browser clicks on a link (or issues a GET)
+        a method with the name of the page is executed.
+        For example, clicking on link "http:/pg1" will cause
+        a method named "pg1" to be executed.
+
+    func(self) 
+        When the browser executes a "server" command, the
+        server runs a method with the same name. For
+        example, if the browser runs the Javascript code:
+            server.addnum(15, 65)
+        then this method will be called:
+            def func(self, param1, param2)
+    '''
+
+    def _initialize(self, server):
+        self._state = JSstate()
+        self.js = JS(self._state)
+        return self
+
+    def _callfxn(self, idx):
+        fxn = self._state._fxn[idx]
+        return fxn()
+
+class Server(ThreadingTCPServer):
+    '''
+    Server implements the web server, waits for connections and processes
+    commands. Each browser request is handled in its own thread and so
+    requests are asynchronous. The server starts listening when the 
+    "start()" method is called.
+
+    Methods
+    ------------
+    start(wait, cookies)
+    '''
+
+    PORT = 8080
+    allow_reuse_address = True
+
+    def __init__(self, appClass, port = PORT, ip = None):
+        '''
+        Parameters
+        -------------
+        appClass
+            Class that inherits Client. Note that this is the
+            class name and not an instance.
+        port
+            Port to listen to (default is PORT)
+        ip
+            IP address to bind (default is all)
+        '''
+        self.apps = {}
+        self.appClass = appClass
+        self.single = False
+        self.port = port
+        self._pscript = re.compile(b'\\<script.*\\s+src\\s*=\\s*"appscript.js"')
+        self._plist = [re.compile(b'\\{JSCRIPT\\}', re.IGNORECASE),
+            re.compile(b'\\<script\\>', re.IGNORECASE),
+            re.compile(b'\\<\\/head\\>', re.IGNORECASE),
+            re.compile(b'\\<body\\>', re.IGNORECASE),
+            re.compile(b'\\<html\\>', re.IGNORECASE)]
+        if ip is None:
+            ip = '127.0.0.1'
+        super(Server, self).__init__((ip, port), Handler)
+
+    def js(self):
+        self.single = True
+        return self._getApp('SINGLE', True).js
+
+    def _getNewUID(self):
+        return uuid.uuid1().hex
+
+    def _getApp(self, uid, create):
+        if self.single:
+            uid = 'SINGLE'
+        if uid and not isinstance(uid, str):
+            uid = uid.value
+        if uid in self.apps:
+            return self.apps[uid]
+        else:
+            if uid is None:
+                uid = self._getNewUID()
+            # print("NEW APP", uid)
+            a = self.appClass()._initialize(self)
+            self.apps[uid] = a
+            a.uid = uid
+            if hasattr(a, "main"):
+                server_thread = threading.Thread(target = self._mainRun, args = (uid,))
+                server_thread.daemon = True
+                server_thread.start()
+            return a
+
+    def _getQuery(self, uid, query):
+        return self._getApp(uid, False)._state._queries[query]
+
+    def _getHome(self, uid):
+        app = self._getApp(uid, False)
+        if hasattr(app, "html"):
+            return self._insertJS(uid, app.html.encode("utf8"))
+        elif hasattr(app, "home"):
+            path = app.home
+        else:
+            path = "index.html"
+        with open(path, "rb") as f:
+            block = f.read()
+            return self._insertJS(uid, block)
+
+    def _getNextTask(self, uid):
+        try:
+            return self._getApp(uid, False)._state._tasks.get(timeout=1)
+        except queue.Empty:
+            return None
+
+    def _run(self, uid, function, args):
+        # print("RUN", function)
+        if hasattr(self._getApp(uid, False), function):
+            f = getattr(self._getApp(uid, False), function)
+            try:
+                result = f(*args)
+            except Exception as ex:
+                result = str(ex)
+        else:
+            result = "Unsupported: " + function + "(" + str(args) + ")"
+        return result
+
+    def _page(self, uid, path, query):
+        fxn = path[1:].replace('/', '_')
+        if hasattr(self._getApp(uid, False), fxn):
+            f = getattr(self._getApp(uid, False), fxn)
+            return f({"page":path, "query":query})
+        return "Not found", 404
+
+    def _insertJS(self, uid, html):
+        U = "var UID='{}';\n".format(uid).encode("utf8")
+        m = self._pscript.search(html)
+        if m:
+            sx, ex = m.span()
+            return html[:sx] + "<script>"+U+"</script>" + html[sx:]
+        for i, p in enumerate(self._plist):
+            m = p.search(html)
+            if m:
+                sx, ex = m.span()
+                if i == 0:
+                    return html[:sx] + U + JSCRIPT + html[ex:]
+                elif i == 1:
+                    return html[:sx] + b"<script>"  + U + JSCRIPT + b"</script>" + html[sx:]
+                elif i == 2:
+                    return html[:sx] + b"<script>"  + U + JSCRIPT + b"</script>" + html[sx:]
+                else:
+                    return html[:sx] + b"<head><script>" + U + JSCRIPT + b"</script></head>" + html
+        return b"<head><script>" + U + JSCRIPT + b"</script></head>" + html
+
+    def _mainRun(self, uid):
+        self._getApp(uid, True).main()
+        self.shutdown()
+
+    def _runServer(self):
+        self.serve_forever()
+
+    def start(self, wait=True, cookies=True):
+        '''
+        Paramters
+        ------------
+        wait
+            Start listening and wait for server to terminate. If this
+            is false, start server on new thread and continue execution.
+        cookies
+            If True, try to use cookies to keep track of sessions. This
+            enables the browser to open multiple windows that all share
+            the same Client object. If False, then cookies are disabled
+            and each tab will be it's own session.
+        '''
+        self.useCookies = cookies
+        if wait or hasattr(self.appClass, "main"):
+            self.serve_forever()
+        else:
+            server_thread = threading.Thread(target=self._runServer)
+            server_thread.daemon = True
+            server_thread.start()
+
+class Handler(SimpleHTTPRequestHandler):
+    '''
+    Handler is created for each request by the Server. This class
+    handles the page requests and delegates tasks.
+    '''
+
+    def reply(self, data, num=200):
+        self.send_response(num)
+        if self.server.useCookies:
+            self.send_header("Set-Cookie", self.cookies.output(header='', sep=''))
+        self.end_headers()
+        if isinstance(data, bytes):
+            self.wfile.write(data)
+        else:
+            self.wfile.write(data.encode("utf8"))
+
+    def replyFile(self, path, num=200):
+        with open(path, "rb") as f:
+            block = f.read()
+            result = self.server._insertJS(self.uid, block)
+            self.reply(result)
+
+    def processCookies(self):
+        if self.server.useCookies:
+            self.cookies = SimpleCookie(self.headers.get('Cookie'))
+            if "UID" in self.cookies:
+                self.uid = self.cookies["UID"]
+            else:
+                self.uid = None
+
+    def setNewUID(self):
+        if self.server.useCookies:
+            self.cookies = SimpleCookie(self.headers.get('Cookie'))
+            
+        if hasattr(self, "uid"):
+            app = self.server._getApp(self.uid, False)
+        else:
+            app = None
+        if app is None:
+            app = self.server._getApp(uuid.uuid1().hex, True)
+        self.uid = app.uid
+
+        if self.server.useCookies:
+            self.cookies["UID"] = self.uid
+
+    def do_GET(self):
+        self.processCookies()
+        qry = urlparse(self.path)
+        self.do_PAGE(qry)
+
+    def do_POST(self):        
+        self.processCookies()
+        l = int(self.headers["Content-length"])
+        data = self.rfile.read(l)
+        req = json.loads(data)
+        self.uid = req["session"]
+        if self.path == "/state":
+            q = self.server._getQuery(self.uid, req['query'])
+            q.put(req)
+            self.reply(str(req))
+        elif self.path == "/run":
+            result = self.server._run(self.uid, req['function'], req['args'])
+            self.reply(json.dumps(result))
+        else:
+            self.do_PAGE(data)
+
+    def do_PAGE(self, qry):
+        # print("PAGE", qry)
+        req = parse_qs(qry.query)
+        if "session" in req:
+            self.uid = req["session"][0]
+        if qry.path == "/":
+            self.setNewUID()
+            self.reply(self.server._getHome(self.uid))
+        elif qry.path == "/eval":
+            script = self.server._getNextTask(self.uid)
+            # print("RUN", script)
+            self.reply(script)
+        elif qry.path == "/appscript.js":
+            self.reply(JSCRIPT)
+        elif os.path.exists(qry.path[1:]):
+            self.replyFile(qry.path[1:])
+        else:
+            reply = self.server._page(self.uid, qry.path, req)
+            if isinstance(reply, list) or isinstance(reply, tuple):
+                self.reply(*reply)
+            else:
+                self.reply(reply)
+
+class JSstate:
+    '''
+    JState keeps track of the Javascript state on the browser.
+
+    _tasks
+        A queue of pending tasks that must be performed on the
+        browser.
+    _fxn
+        Map to keep track of callables that the browser's 
+        Javascript is allowed to call.
+    _queries
+        When python requests a statement to be evaluated, a
+        unique query id is assigned. Then a Queue is created
+        to wait for reasults. This maps ids to Queues.
+    '''
+    def __init__(self):
+        self._tasks = queue.Queue()
+        self._fxn = {}
+        self._queries = {}
+
+class JSchain:
+    '''
+    JSchain keeps track of the dynamically generated Javascript. It
+    tracks names, data item accesses and function calls. JSchain
+    is usually not used directly, but accessed through the JS class.
+
+    There is a special name called `dom` which is shorthand for
+    lookups. For example,
+        dom.button1.innerHTML
+    Becomes
+        document.getElementById("button1").innerHTML
+
+    Example
+    --------------
+    state = JSstate()
+    js = JSchain(state)
+    js.document.getElementById("txt").value
+    '''
+
+    def __init__(self, state):
+        self.state = state
+        self.chain = []
+        self.keep = True
+
+    def _dup(self):
+        js = JSchain(self.state)
+        js.chain = self.chain.copy() # [x[:] for x in self.chain]
+        return js
+
+    def _add(self, attr, dot=True):
+        if dot and len(self.chain) > 0:
+            self.chain.append(".")
+        self.chain.append(attr)
+        return self
+
+    def _last(self):
+        return self.chain[-1]
+
+    def __getattr__(self, attr):
+        if attr == "__iter__":
+            return self
+        if self._last() == 'dom':
+            self.chain[-1] = 'document'
+            self._add('getElementById')
+            self._add('("{}")'.format(attr), dot=False)
+        else:
+            self._add(attr)
+        return self
+
+    def __setattr__(self, attr, value):
+        if attr == "chain" or attr == "state" or attr == "keep":
+            super(JSchain, self).__setattr__(attr, value)
+            return value
+        if callable(value):
+            idx = id(value)
+            self.state._fxn[idx] = value
+            self._add(f"{attr}=function(){{server._callfxn({idx});}}")
+        else:
+            self._add(attr + "=" +json.dumps(value))
+        return self
+
+    def __call__(self, *args, **kwargs):
+        p1 = [json.dumps(v) for v in args]
+        p2 = [json.dumps(v) for k,v in kwargs.items()]
+        s = ','.join(p1 + p2)
+        self._add('('+s+')', dot=False)
+        return self
+
+    def _statement(self):
+        return ''.join(self.chain)
+
+    def __bytes__(self):
+        return (''.join(self.chain)).encode("utf8")
+
+    def _addTask(self, stmt):
+        for _ in range(10):
+            if self.state._tasks.qsize() < 5: break
+            # if self.state._tasks.empty(): break
+            time.sleep(0.1)
+        self.state._tasks.put(stmt)
+
+    def __del__(self):
+        if self.keep:
+            stmt = self._statement()
+            self._addTask(stmt)
+
+    def eval(self, timeout=5):
+        stmt = self._statement()
+        q = queue.Queue()
+        idx = id(q)
+        self.state._queries[idx] = q
+        data = json.dumps(stmt)
+        self._addTask("sendBrowser({}, {})".format(data, idx))
+        try:
+            result = q.get(timeout=timeout)
+        except queue.Empty:
+            raise TimeoutError("Timout waiting on: "+stmt)
+        if result["error"] != "":
+            raise ValueError(result["error"])
+        return result["value"]
+
+class JS:
+    '''
+    JS handles the lifespan of JSchain objects and things like setting
+    and evaluation.
+
+    Example:
+    --------------
+    state = JSstate()
+    js = JS(state)
+    js.document.getElementById("txt").value = 25
+    '''
+
+    def __init__(self, state):
+        self.state = state
+        self.linkset = {}
+        self.linkcall = {}
+
+    def __getattr__(self, attr):
+        chain = JSchain(self.state)
+        chain._add(attr)
+        return chain
+
+    def __setattr__(self, attr, value):
+        if attr == "state" or attr == "linkset" or attr == "linkcall":
+            super(JS, self).__setattr__(attr, value)
+            return value
+        c = self.__getattr__(attr)
+        c._add("=" + json.dumps(value), dot=False)
+        return c
+
+    def __getitem__(self, key):
+        pass
+
+    def __setitem__(self, key, value):
+        if key in self.linkcall:
+            c = self.linkcall[key]
+            if isinstance(c, JSchain):
+                js = c._dup()
+                if isinstance(value, list) or isinstance(value, tuple):
+                    js.__call__(*value)
+                else:
+                    js.__call__(value)
+            elif callable(c):
+                c(value)
+        elif key in self.linkset:
+            c = self.linkset[key]
+            if isinstance(c, JSchain):
+                js = c._dup()
+                js._add("=" + json.dumps(value), dot=False)
+
+    def eval(self, stmt):
+        chain = JSchain(self.state)
+        chain._add(stmt)
+        return chain.eval()
+
+    def val(self, key, callback):
+        self.linkset[key] = callback
+        callback.keep = False
+
+    def call(self, key, callback):
+        self.linkcall[key] = callback
+        if isinstance(callback, JSchain):
+            callback.keep = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
