@@ -1,17 +1,16 @@
 # Jyserver Web Framework with Pythonic Javascript Syntax
 
-Jyserver is a framework for simplifying the creation of font ends
-for apps and kiosks by providing real-time access to the browser's DOM and 
-Javascript from the server using Python syntax. It also
-provides access to the Python code from the browser's Javascript.
+Jyserver is a framework for simplifying the creation of font ends for apps and
+kiosks by providing real-time access to the browser's DOM and Javascript from
+the server using Python syntax. It also provides access to the Python code from
+the browser's Javascript.
 
-The difference between this framework and others (such as Django,
-Flask, etc.) is that jyserver uses Python dynamic syntax evaluation
-so that you can write Python code that will dynamically be converted
-to JS and executed on the browser. On the browser end,
-it uses JS's dynamic Proxy object to rewrite JS code for execution by
-the server. All of this is done transparently without any additional
-libraries or code. See example below.
+The difference between this framework and others (such as Django, Flask, etc.)
+is that jyserver uses Python dynamic syntax evaluation so that you can write
+Python code that will dynamically be converted to JS and executed on the
+browser. On the browser end, it uses JS's dynamic Proxy object to rewrite JS
+code for execution by the server. All of this is done transparently without any
+additional libraries or code. See example below.
 
 Tutorial: https://dev.to/ftrias/simple-kiosk-framework-in-python-2ane
 
@@ -59,29 +58,47 @@ How does this work?
 
 1. After calling `httpd.start()`, the server will listen for new http requests.
 
-2. When "/" is requested, jyserver will insert special Javascript code into the HTML that enables communication before sending it to the browser. This code creates the `server` Proxy object.
+2. When "/" is requested, jyserver will insert special Javascript code into the
+   HTML that enables communication before sending it to the browser. This code
+   creates the `server` Proxy object.
 
-3. This injected code will cause the browser to send an asynchronous http request to the server asking for new commands for the browser to execute. Then it waits for a response in the background.
+3. This injected code will cause the browser to send an asynchronous http
+   request to the server asking for new commands for the browser to execute.
+   Then it waits for a response in the background.
 
-4. When the user clicks on the button `reset`, the `server` Proxy object is called. It will extract the method name--in this case `reset`--and then make an http request to the server to execute that statement. 
+4. When the user clicks on the button `reset`, the `server` Proxy object is
+   called. It will extract the method name--in this case `reset`--and then make
+   an http request to the server to execute that statement.
 
-5. The server will receive this http request, look at the App class, find a method with that name and execute it.
+5. The server will receive this http request, look at the App class, find a
+   method with that name and execute it.
 
-6. The executed method `reset()` first increases the variable `start0`. Then it begins building a Javascript command by using the special `self.js` command. `self.js` uses Python's dynamic language features `__getattr__`, `__setattr__`, etc. to build Javascript syntax on the fly. 
+6. The executed method `reset()` first increases the variable `start0`. Then it
+   begins building a Javascript command by using the special `self.js` command.
+   `self.js` uses Python's dynamic language features `__getattr__`,
+   `__setattr__`, etc. to build Javascript syntax on the fly.
 
-7. When this "dynamic" statement get assigned a value (in our case `"0.0"`), it will get converted to Javascript and sent to the browser, which has been waiting for new commands in step 3. The statement will look like: `document.getElementById("time").innerHTML = "0.0"`
+7. When this "dynamic" statement get assigned a value (in our case `"0.0"`), it
+   will get converted to Javascript and sent to the browser, which has been
+   waiting for new commands in step 3. The statement will look like:
+   `document.getElementById("time").innerHTML = "0.0"`
 
-8. The browser will get the statement, evaluate it and return the results to the server. Then the browser will query for new commands in the background.
+8. The browser will get the statement, evaluate it and return the results to the
+   server. Then the browser will query for new commands in the background.
 
-It seems complicated but this process usually takes less than a 0.01 seconds. If there are multiple statements to execute, they get queued and processed together, which cuts back on the back-and-forth chatter.
+It seems complicated but this process usually takes less than a 0.01 seconds. If
+there are multiple statements to execute, they get queued and processed
+together, which cuts back on the back-and-forth chatter.
 
-All communication is initiated by the browser. The server only listens for special GET and POST requests.
+All communication is initiated by the browser. The server only listens for
+special GET and POST requests.
 
 ## Overview of operation
 
-The browser initiates all communcation. The server listens for connections and sends
-respnses. Each page request is processed in its own thread and so results may finish
-out of order and any waiting does not stall either the browser or the server.
+The browser initiates all communcation. The server listens for connections and
+sends respnses. Each page request is processed in its own thread so results may
+finish out of order and any waiting does not stall either the browser or the
+server.
 
 | Browser   |   Server  |
 |-----------|-----------|
@@ -90,13 +107,13 @@ out of order and any waiting does not stall either the browser or the server.
 | As commands finish, send back results | Match results with commands |
 | Send server statements for evaluation; wait for results |  Executes then and sends back results |
 
-When the browser queries for new commands, the server returns any pending commands that the
-browser needs to execute. If
-there are no pending commands, it waits for 5-10 seconds for new commands to queue
-before closing the connection. The
-browser, upon getting and empty result will initiate a new connection to query for
-results. Thus, although there is always a connection open between the browser and server,
-this connection is reset every 5-10 seconds to avoid a timeout.
+When the browser queries for new commands, the server returns any pending
+commands that the browser needs to execute. If there are no pending commands, it
+waits for 5-10 seconds for new commands to queue before closing the connection.
+The browser, upon getting an empty result will initiate a new connection to
+query for results. Thus, although there is always a connection open between the
+browser and server, this connection is reset every 5-10 seconds to avoid a
+timeout.
 
 ## Other features
 
@@ -119,15 +136,15 @@ class App(Client):
         self.js.dom.b2.onclick = self.stop
 ```
 
-If a `main` function is given, it is executed. When it finishes, the server is terminate. If no `main` function is given, then the server
-enters an infinite loop.
+If a `main` function is given, it is executed. When it finishes, the server is
+terminate. If no `main` function is given, then the server enters an infinite
+loop.
 
 ### Lazy evaluation provides live data
 
-Statements are evaluated lazily by `self.js`. This means that they are
-executed only when they are resolve to an actual value, which
-can cause some statements to be evaluated out of order. For example,
-consider:
+Statements are evaluated lazily by `self.js`. This means that they are executed
+only when they are resolve to an actual value, which can cause some statements
+to be evaluated out of order. For example, consider:
 
 ```python
 v = self.js.var1
@@ -135,13 +152,15 @@ self.js.var1 = 10
 print(v)
 ```
 
-Surprisinly, this will always return 10 no matter what `var1` is initially. This is because the assignment `v = self.js.var1` returns a Javascript object and not the actual value. 
-The object is sent to the browser to be evaluated 
-only when it is used by an operation. 
-Every time you use `v`, it will be sent to
-the browser for evaluation. Thus, it provides a live link to the data.
+Surprisinly, this will always return `10` no matter what `var1` is initially.
+This is because the assignment `v = self.js.var1` returns a Javascript object
+and not the actual value. The object is sent to the browser to be evaluated only
+when it is used by an operation. Every time you use `v` in an operation, it will
+be sent to the browser for evaluation. Thus, it provides a live link to the
+data.
 
-This can be changed by calling `v = self.js.var1.eval()`, casting it or performing some operation.
+This can be changed by calling `v = self.js.var1.eval()`, casting it or
+performing some operation.
 
 ## Installation
 

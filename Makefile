@@ -18,4 +18,11 @@ install: wheel
 upload: wheel
 	twine upload dist/*
 
+docs:
+	mkdir docs
+
+html: docs
+	rm -r docs/*
+	pdoc --html -o docs jyserver/
+	
 .PHONY: init test

@@ -1,19 +1,20 @@
 '''
-Framework to simplify the creation of interactive websites by providing
-direct real-time DOM access using Pythonic syntax. The critical
-component is the JS class that dynamically constructs Javascript
-syntax from python syntax and then sends the statements for execution
-on the web browser. On the web browser, there is a corresponding class
-that dynamically converts Javascript syntax to Python and sends it
-to the server for evaluation.
+
+Framework to simplify the creation of interactive websites by providing direct
+real-time DOM access using Pythonic syntax. The critical component is the JS
+class that dynamically constructs Javascript syntax from python syntax and then
+sends the statements for execution on the web browser. On the web browser, there
+is a corresponding class that dynamically converts Javascript syntax to Python
+and sends it to the server for evaluation.
 
 Self-contained example:
 -------------------------------
+```
 class App(Client):
     def __init__(self):
         self.html = """
-            <p id="time">TIME</p>
-            <button id="reset" onclick="server.reset()">Reset</button>
+        <p id="time">TIME</p>
+        <button id="reset" onclick="server.reset()">Reset</button>
         """
 
     def reset(self):
@@ -29,6 +30,7 @@ class App(Client):
 httpd = Server(App)
 print("serving at port", httpd.port)
 httpd.start()
+```
 '''
 
 from socketserver import ThreadingTCPServer
@@ -43,14 +45,14 @@ import os
 import copy
 import re
 import time
-import uuid 
+import uuid
 
 #
 # This is the Javascript code that gets injected into the HTML
 # page.
 #
 # evalBrowser()     Queries the server for any pending commands. If
-#                   there are no pending commands, the connection 
+#                   there are no pending commands, the connection
 #                   is kept open by the server until a pending
 #                   command is issued, or a timeout. At the end of
 #                   the query, the function gets scheduled for execution
@@ -112,41 +114,46 @@ JSCRIPT = b"""
     evalBrowser()
 """
 
+
 class Client:
     '''
-    Client class contains all methods and code that is executed on the
-    server and browser. Users of this library should inherit this class
-    and implement methods. There are three types of methods:
+    Client class contains all methods and code that is executed on the server
+    and browser. Users of this library should inherit this class and implement
+    methods. There are three types of methods:
 
-    Atributes
+    Attributes
     ------------
     home
         Optional filename to send when "/" is requested
     html
         Optional HTML to send when "/" is requested. If neither
         `home` nor `html` are set, then it will send "index.html"
-
+    
     Methods
-    -----------
-    main(self)
-        If this is implemented, then the server will
-        begin execution of this function immediately.
-        The server will terminate when this function
-        terminates.
+    ------------
+    *main(self)*
 
-    page(self)
-        When the browser clicks on a link (or issues a GET)
-        a method with the name of the page is executed.
-        For example, clicking on link "http:/pg1" will cause
-        a method named "pg1" to be executed.
+    If this is implemented, then the server will begin execution of this
+    function immediately. The server will terminate when this function
+    terminates.
 
-    func(self) 
-        When the browser executes a "server" command, the
-        server runs a method with the same name. For
-        example, if the browser runs the Javascript code:
-            server.addnum(15, 65)
-        then this method will be called:
-            def func(self, param1, param2)
+    *page(self)*
+
+    When the browser clicks on a link (or issues a GET) a method with the
+    name of the page is executed. For example, clicking on link "http:/pg1"
+    will cause a method named "pg1" to be executed.
+
+    *func(self)*
+
+    When the browser executes a "server" command, the server runs a method
+    with the same name. For example, if the browser runs the Javascript
+    code:
+
+        server.addnum(15, 65)
+
+    then this method will be called:
+
+        def func(self, param1, param2)
     '''
 
     def _initialize(self, server):
@@ -158,12 +165,13 @@ class Client:
         fxn = self._state._fxn[idx]
         return fxn()
 
+
 class Server(ThreadingTCPServer):
     '''
     Server implements the web server, waits for connections and processes
-    commands. Each browser request is handled in its own thread and so
-    requests are asynchronous. The server starts listening when the 
-    "start()" method is called.
+    commands. Each browser request is handled in its own thread and so requests
+    are asynchronous. The server starts listening when the "start()" method is
+    called.
 
     Methods
     ------------
@@ -173,7 +181,7 @@ class Server(ThreadingTCPServer):
     PORT = 8080
     allow_reuse_address = True
 
-    def __init__(self, appClass, port = PORT, ip = None):
+    def __init__(self, appClass, port=PORT, ip=None):
         '''
         Parameters
         -------------
@@ -194,12 +202,13 @@ class Server(ThreadingTCPServer):
         # The port number
         self.port = port
         # Patterns for matching HTML to figure out where to inject the javascript code
-        self._pscript = re.compile(b'\\<script.*\\s+src\\s*=\\s*"appscript.js"')
+        self._pscript = re.compile(
+            b'\\<script.*\\s+src\\s*=\\s*"appscript.js"')
         self._plist = [re.compile(b'\\{JSCRIPT\\}', re.IGNORECASE),
-            re.compile(b'\\<script\\>', re.IGNORECASE),
-            re.compile(b'\\<\\/head\\>', re.IGNORECASE),
-            re.compile(b'\\<body\\>', re.IGNORECASE),
-            re.compile(b'\\<html\\>', re.IGNORECASE)]
+                       re.compile(b'\\<script\\>', re.IGNORECASE),
+                       re.compile(b'\\<\\/head\\>', re.IGNORECASE),
+                       re.compile(b'\\<body\\>', re.IGNORECASE),
+                       re.compile(b'\\<html\\>', re.IGNORECASE)]
         if ip is None:
             ip = '127.0.0.1'
         # Create the server object. Must call start() to begin listening.
@@ -246,7 +255,8 @@ class Server(ThreadingTCPServer):
             # If there is a "main" function, then start a new thread to run it.
             # _mainRun will run main and terminate the server after main returns.
             if hasattr(a, "main"):
-                server_thread = threading.Thread(target = self._mainRun, args = (uid,))
+                server_thread = threading.Thread(
+                    target=self._mainRun, args=(uid,))
                 server_thread.daemon = True
                 server_thread.start()
             return a
@@ -313,7 +323,7 @@ class Server(ThreadingTCPServer):
         fxn = path[1:].replace('/', '_')
         if hasattr(self._getApp(uid, False), fxn):
             f = getattr(self._getApp(uid, False), fxn)
-            return f({"page":path, "query":query})
+            return f({"page": path, "query": query})
         return "Not found", 404
 
     def _insertJS(self, uid, html):
@@ -337,9 +347,9 @@ class Server(ThreadingTCPServer):
                 if i == 0:
                     return html[:sx] + U + JSCRIPT + html[ex:]
                 elif i == 1:
-                    return html[:sx] + b"<script>"  + U + JSCRIPT + b"</script>" + html[sx:]
+                    return html[:sx] + b"<script>" + U + JSCRIPT + b"</script>" + html[sx:]
                 elif i == 2:
-                    return html[:sx] + b"<script>"  + U + JSCRIPT + b"</script>" + html[sx:]
+                    return html[:sx] + b"<script>" + U + JSCRIPT + b"</script>" + html[sx:]
                 else:
                     return html[:sx] + b"<head><script>" + U + JSCRIPT + b"</script></head>" + html
         return b"<head><script>" + U + JSCRIPT + b"</script></head>" + html
@@ -361,7 +371,7 @@ class Server(ThreadingTCPServer):
         '''
         Start listening to the port and processing requests.
 
-        Paramters
+        Parameters
         ------------
         wait
             Start listening and wait for server to terminate. If this
@@ -380,6 +390,7 @@ class Server(ThreadingTCPServer):
             server_thread.daemon = True
             server_thread.start()
 
+
 class Handler(SimpleHTTPRequestHandler):
     '''
     Handler is created for each request by the Server. This class
@@ -393,7 +404,8 @@ class Handler(SimpleHTTPRequestHandler):
         '''
         self.send_response(num)
         if self.server.useCookies:
-            self.send_header("Set-Cookie", self.cookies.output(header='', sep=''))
+            self.send_header(
+                "Set-Cookie", self.cookies.output(header='', sep=''))
         self.end_headers()
         if data is None:
             return
@@ -428,7 +440,7 @@ class Handler(SimpleHTTPRequestHandler):
         '''
         if self.server.useCookies:
             self.cookies = SimpleCookie(self.headers.get('Cookie'))
-            
+
         if hasattr(self, "uid"):
             app = self.server._getApp(self.uid, False)
         else:
@@ -448,11 +460,11 @@ class Handler(SimpleHTTPRequestHandler):
         qry = urlparse(self.path)
         self.do_PAGE(qry)
 
-    def do_POST(self):    
+    def do_POST(self):
         '''
         Called by parent to process POST requests. Handles the built-in
         /state and /run requests and forwards all others to do_PAGE.
-        '''    
+        '''
         self.processCookies()
         l = int(self.headers["Content-length"])
         data = self.rfile.read(l)
@@ -507,10 +519,13 @@ class Handler(SimpleHTTPRequestHandler):
             else:
                 self.reply(reply)
 
+
 class JSstate:
     '''
     JState keeps track of the Javascript state on the browser.
 
+    Attributes
+    ------------
     _tasks
         A queue of pending tasks that must be performed on the
         browser.
@@ -522,10 +537,12 @@ class JSstate:
         unique query id is assigned. Then a Queue is created
         to wait for reasults. This maps ids to Queues.
     '''
+
     def __init__(self):
         self._tasks = queue.Queue()
         self._fxn = {}
         self._queries = {}
+
 
 class JSchain:
     '''
@@ -533,29 +550,33 @@ class JSchain:
     tracks names, data item accesses and function calls. JSchain
     is usually not used directly, but accessed through the JS class.
 
+    Attributes
+    -----------
+    state
+        A JSstate instance. This instance should be the same
+        for all call of the same session.
+        
+    Notes
+    -----------
     There is a special name called `dom` which is shorthand for
     lookups. For example,
+
         dom.button1.innerHTML
+
     Becomes
+
         document.getElementById("button1").innerHTML
 
     Example
     --------------
+    ```
     state = JSstate()
     js = JSchain(state)
     js.document.getElementById("txt").value
+    ```
     '''
 
     def __init__(self, state):
-        '''
-        Initialize a new JSchain object.
-
-        Parameters:
-        -----------
-        state
-            A JSstate instance. This instance should be the same
-            for all call of the same session.
-        '''
         self.state = state
         self.chain = []
         self.keep = True
@@ -565,7 +586,7 @@ class JSchain:
         Duplicate this chain for processing.
         '''
         js = JSchain(self.state)
-        js.chain = self.chain.copy() # [x[:] for x in self.chain]
+        js.chain = self.chain.copy()  # [x[:] for x in self.chain]
         return js
 
     def _add(self, attr, dot=True):
@@ -621,7 +642,7 @@ class JSchain:
             self._add(f"{attr}=function(){{server._callfxn({idx});}}")
         else:
             # otherwise, regular assignment
-            self._add(attr + "=" +json.dumps(value))
+            self._add(attr + "=" + json.dumps(value))
         return self
 
     def __call__(self, *args, **kwargs):
@@ -631,7 +652,7 @@ class JSchain:
         '''
         # evaluate the arguments
         p1 = [json.dumps(JS._v(v)) for v in args]
-        p2 = [json.dumps(JS._v(v)) for k,v in kwargs.items()]
+        p2 = [json.dumps(JS._v(v)) for k, v in kwargs.items()]
         s = ','.join(p1 + p2)
         # create the function call
         self._add('('+s+')', dot=False)
@@ -660,7 +681,8 @@ class JSchain:
         affect responsiveness.
         '''
         for _ in range(10):
-            if self.state._tasks.qsize() < 5: break
+            if self.state._tasks.qsize() < 5:
+                break
             # if self.state._tasks.empty(): break
             time.sleep(0.1)
         self.state._tasks.put(stmt)
@@ -671,12 +693,16 @@ class JSchain:
 
         An object is deleted when it goes out of scope. That's when it is put
         together and sent to the browser for execution. 
-        
+
         For statements,
         this happens when the statement ends. For example,
+
            self.js.func(1)
+
         goes out of scope when the statement after func(1). However,
+
            v = self.js.myvalue
+
         goes out of scope when the "v" goes out of scope, usually at then end of
         the function where it was used. In this case, the Javascript will be
         evaluated when "v" itself is evaluated. This happens when you perform
@@ -685,9 +711,11 @@ class JSchain:
         "v" in the example above is assigned an object and not a value. This
         means that every time it is evaluated in an expression, it goes back 
         to the server and retrieves the current value.
-        
+
         On the other hand,
+
            self.v = self.js.myvalue
+
         will probably never go out of scope because it is tied to the class.
         To force an evaluation, call the "eval()"
         method, as in "self.js.myvalue.eval()".
@@ -706,7 +734,7 @@ class JSchain:
         and waiting for a response. This function is automatically called when the object
         is used in operators or goes out of scope so it rarely needs to
         be called directly.
-        
+
         However, it is helpful
         to occasionally call this to avoid out-of-order results. For example,
 
@@ -727,6 +755,11 @@ class JSchain:
 
         In that case, "v" is resolved immediately and hold the value of var1 before the
         assignment.
+
+        Attributes
+        -------------
+        timeout
+            Time to wait in seconds before giving up if no response is received.
         '''
         if not self.keep:
             raise ValueError("Expression cannot be evaluated")
@@ -833,6 +866,7 @@ class JSchain:
     def __contains__(self, item): return self.eval().__contains__(item)
     def __missing__(self, key): return self.eval().__missing__(key)
 
+
 class JS:
     '''
     JS handles the lifespan of JSchain objects and things like setting
@@ -840,9 +874,11 @@ class JS:
 
     Example:
     --------------
+    ```
     state = JSstate()
     js = JS(state)
     js.document.getElementById("txt").value = 25
+    ```
     '''
 
     def __init__(self, state):
