@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
 <meta name="generator" content="pdoc 0.7.5" />
 <title>jyserver API documentation</title>
-<meta name="description" content="Framework to simplify the creation of interactive websites by providing direct
-real-time DOM access using Pythonic syntax. The critical component is …" />
+<meta name="description" content="Jyserver is a framework for simplifying the creation of font ends for apps and
+kiosks by providing real-time access to the browser&#39;s DOM and …" />
 <link href='https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.0/normalize.min.css' rel='stylesheet'>
 <link href='https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/8.0.0/sanitize.min.css' rel='stylesheet'>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css" rel="stylesheet">
@@ -21,12 +21,18 @@ real-time DOM access using Pythonic syntax. The critical component is …" />
 <h1 class="title">Module <code>jyserver</code></h1>
 </header>
 <section id="section-intro">
-<p>Framework to simplify the creation of interactive websites by providing direct
-real-time DOM access using Pythonic syntax. The critical component is the JS
-class that dynamically constructs Javascript syntax from python syntax and then
-sends the statements for execution on the web browser. On the web browser, there
-is a corresponding class that dynamically converts Javascript syntax to Python
-and sends it to the server for evaluation.</p>
+<p>Jyserver is a framework for simplifying the creation of font ends for apps and
+kiosks by providing real-time access to the browser's DOM and Javascript from
+the server using Python syntax. It also provides access to the Python code from
+the browser's Javascript.</p>
+<p>The difference between this framework and others (such as Django, Flask, etc.)
+is that jyserver uses Python dynamic syntax evaluation so that you can write
+Python code that will dynamically be converted to JS and executed on the
+browser. On the browser end, it uses JS's dynamic Proxy object to rewrite JS
+code for execution by the server. All of this is done transparently without any
+additional libraries or code. See example below.</p>
+<p>Documentation: <a href="https://ftrias.github.io/jyserver/">Class documentation</a></p>
+<p>Tutorial: <a href="https://dev.to/ftrias/simple-kiosk-framework-in-python-2ane">Dev.to article</a></p>
 <h2 id="self-contained-example">Self-contained example:</h2>
 <pre><code>class App(Client):
     def __init__(self):
@@ -54,13 +60,21 @@ httpd.start()
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">&#39;&#39;&#39;
+Jyserver is a framework for simplifying the creation of font ends for apps and
+kiosks by providing real-time access to the browser&#39;s DOM and Javascript from
+the server using Python syntax. It also provides access to the Python code from
+the browser&#39;s Javascript.
 
-Framework to simplify the creation of interactive websites by providing direct
-real-time DOM access using Pythonic syntax. The critical component is the JS
-class that dynamically constructs Javascript syntax from python syntax and then
-sends the statements for execution on the web browser. On the web browser, there
-is a corresponding class that dynamically converts Javascript syntax to Python
-and sends it to the server for evaluation.
+The difference between this framework and others (such as Django, Flask, etc.)
+is that jyserver uses Python dynamic syntax evaluation so that you can write
+Python code that will dynamically be converted to JS and executed on the
+browser. On the browser end, it uses JS&#39;s dynamic Proxy object to rewrite JS
+code for execution by the server. All of this is done transparently without any
+additional libraries or code. See example below.
+
+Documentation: [Class documentation](https://ftrias.github.io/jyserver/)
+
+Tutorial: [Dev.to article](https://dev.to/ftrias/simple-kiosk-framework-in-python-2ane)
 
 Self-contained example:
 -------------------------------
@@ -184,31 +198,31 @@ class Client:
         Optional HTML to send when &#34;/&#34; is requested. If neither
         `home` nor `html` are set, then it will send &#34;index.html&#34;
     
-    Methods
+    Optional Methods
     ------------
-    *main(self)*
+    * main(self)
 
-    If this is implemented, then the server will begin execution of this
-    function immediately. The server will terminate when this function
-    terminates.
+        If this is implemented, then the server will begin execution of this
+        function immediately. The server will terminate when this function
+        terminates.
 
-    *page(self)*
+    * page(self)
 
-    When the browser clicks on a link (or issues a GET) a method with the
-    name of the page is executed. For example, clicking on link &#34;http:/pg1&#34;
-    will cause a method named &#34;pg1&#34; to be executed.
+        When the browser clicks on a link (or issues a GET) a method with the
+        name of the page is executed. For example, clicking on link &#34;http:/pg1&#34;
+        will cause a method named &#34;pg1&#34; to be executed.
 
-    *func(self)*
+    * func(self)
 
-    When the browser executes a &#34;server&#34; command, the server runs a method
-    with the same name. For example, if the browser runs the Javascript
-    code:
+        When the browser executes a &#34;server&#34; command, the server runs a method
+        with the same name. For example, if the browser runs the Javascript
+        code:
 
-        server.addnum(15, 65)
+            server.addnum(15, 65)
 
-    then this method will be called:
+        then this method will be called:
 
-        def func(self, param1, param2)
+            def func(self, param1, param2)
     &#39;&#39;&#39;
 
     def _initialize(self, server):
@@ -1053,16 +1067,22 @@ methods. There are three types of methods:</p>
 <dd>Optional HTML to send when "/" is requested. If neither
 <code>home</code> nor <code>html</code> are set, then it will send "index.html"</dd>
 </dl>
-<h2 id="methods">Methods</h2>
-<p><em>main(self)</em></p>
+<h2 id="optional-methods">Optional Methods</h2>
+<ul>
+<li>
+<p>main(self)</p>
 <p>If this is implemented, then the server will begin execution of this
 function immediately. The server will terminate when this function
 terminates.</p>
-<p><em>page(self)</em></p>
+</li>
+<li>
+<p>page(self)</p>
 <p>When the browser clicks on a link (or issues a GET) a method with the
 name of the page is executed. For example, clicking on link "http:/pg1"
 will cause a method named "pg1" to be executed.</p>
-<p><em>func(self)</em></p>
+</li>
+<li>
+<p>func(self)</p>
 <p>When the browser executes a "server" command, the server runs a method
 with the same name. For example, if the browser runs the Javascript
 code:</p>
@@ -1070,7 +1090,9 @@ code:</p>
 </code></pre>
 <p>then this method will be called:</p>
 <pre><code>def func(self, param1, param2)
-</code></pre></section>
+</code></pre>
+</li>
+</ul></section>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -1089,31 +1111,31 @@ code:</p>
         Optional HTML to send when &#34;/&#34; is requested. If neither
         `home` nor `html` are set, then it will send &#34;index.html&#34;
     
-    Methods
+    Optional Methods
     ------------
-    *main(self)*
+    * main(self)
 
-    If this is implemented, then the server will begin execution of this
-    function immediately. The server will terminate when this function
-    terminates.
+        If this is implemented, then the server will begin execution of this
+        function immediately. The server will terminate when this function
+        terminates.
 
-    *page(self)*
+    * page(self)
 
-    When the browser clicks on a link (or issues a GET) a method with the
-    name of the page is executed. For example, clicking on link &#34;http:/pg1&#34;
-    will cause a method named &#34;pg1&#34; to be executed.
+        When the browser clicks on a link (or issues a GET) a method with the
+        name of the page is executed. For example, clicking on link &#34;http:/pg1&#34;
+        will cause a method named &#34;pg1&#34; to be executed.
 
-    *func(self)*
+    * func(self)
 
-    When the browser executes a &#34;server&#34; command, the server runs a method
-    with the same name. For example, if the browser runs the Javascript
-    code:
+        When the browser executes a &#34;server&#34; command, the server runs a method
+        with the same name. For example, if the browser runs the Javascript
+        code:
 
-        server.addnum(15, 65)
+            server.addnum(15, 65)
 
-    then this method will be called:
+        then this method will be called:
 
-        def func(self, param1, param2)
+            def func(self, param1, param2)
     &#39;&#39;&#39;
 
     def _initialize(self, server):

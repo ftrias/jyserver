@@ -172,4 +172,4 @@ Available using pip or conda
 pip install jyserver
 ```
 
-Also available on (github:ftrias/jyserver)[https://github.com/ftrias/jyserver]
+Source code available on [github:ftrias/jyserver](https://github.com/ftrias/jyserver)
