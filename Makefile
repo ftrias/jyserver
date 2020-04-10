@@ -22,7 +22,9 @@ docs:
 	mkdir docs
 
 html: docs
-	rm -r docs/*
+	rm -rf docs/*
 	pdoc --html -o docs jyserver/
+	mv docs/jyserver/index.html docs
+	rmdir docs/jyserver
 	
 .PHONY: init test
