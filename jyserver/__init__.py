@@ -325,6 +325,8 @@ class Handler(SimpleHTTPRequestHandler):
         if self.server.useCookies:
             self.send_header("Set-Cookie", self.cookies.output(header='', sep=''))
         self.end_headers()
+        if data is None:
+            return
         if isinstance(data, bytes):
             self.wfile.write(data)
         else:
@@ -376,7 +378,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.reply(str(req))
         elif self.path == "/run":
             result = self.server._run(self.uid, req['function'], req['args'])
-            self.reply(json.dumps(result))
+            self.reply(json.dumps(JS._v(result)))
         else:
             self.do_PAGE(data)
 
@@ -473,6 +475,7 @@ class JSchain:
         return self
 
     def __setattr__(self, attr, value):
+        value = JS._v(value)
         if attr == "chain" or attr == "state" or attr == "keep":
             super(JSchain, self).__setattr__(attr, value)
             return value
@@ -485,8 +488,8 @@ class JSchain:
         return self
 
     def __call__(self, *args, **kwargs):
-        p1 = [json.dumps(v) for v in args]
-        p2 = [json.dumps(v) for k,v in kwargs.items()]
+        p1 = [json.dumps(JS._v(v)) for v in args]
+        p2 = [json.dumps(JS._v(v)) for k,v in kwargs.items()]
         s = ','.join(p1 + p2)
         self._add('('+s+')', dot=False)
         return self
@@ -524,6 +527,95 @@ class JSchain:
             raise ValueError(result["error"])
         return result["value"]
 
+    #
+    # Magic methods
+    #
+    def __cmp__(self, other): return self.eval().__cmp__(other)
+    def __gt__(self, other): return self.eval() > other
+    def __lt__(self, other): return self.eval() < other
+    def __ge__(self, other): return self.eval() >= other
+    def __le__(self, other): return self.eval() <= other
+    def __eq__(self, other): return self.eval() == other
+    def __ne__(self, other): return self.eval() != other
+
+    def __pos__(self): return self.eval().__pos__()
+    def __neg__(self): return self.eval().__neg__()
+    def __abs__(self): return self.eval().__abs__()
+    def __invert__(self): return self.eval().__invert__()
+    def __round__(self, n): return self.eval().__round__(n)
+    def __floor__(self): return self.eval().__floor__()
+    def __ceil__(self): return self.eval().__ceil__()
+    def __trunc__(self): return self.eval().__trunc__()
+
+    def __add__(self, other): return self.eval().__add__(other)
+    def __and__(self, other): return self.eval().__and__(other)
+    def __div__(self, other): return self.eval().__div__(other)
+    def __divmod__(self, other): return self.eval().__divmod__(other)
+    def __floordiv__(self, other): return self.eval().__floordiv__(other)
+    def __lshift__(self, other): return self.eval().__lshift__(other)
+    def __mod__(self, other): return self.eval().__mod__(other)
+    def __mul__(self, other): return self.eval().__mul__(other)
+    def __or__(self, other): return self.eval().__or__(other)
+    def __pow__(self, other): return self.eval().__pow__(other)
+    def __rshift__(self, other): return self.eval().__rshift__(other)
+    def __sub__(self, other): return self.eval().__sub__(other)
+    def __truediv__(self, other): return self.eval().__truediv__(other)
+    def __xor__(self, other): return self.eval().__xor__(other)
+
+    def __radd__(self, other): return self.eval().__radd__(other)
+    def __rand__(self, other): return self.eval().__rand__(other)
+    def __rdiv__(self, other): return self.eval().__rdiv__(other)
+    def __rdivmod__(self, other): return self.eval().__rdivmod__(other)
+    def __rfloordiv__(self, other): return self.eval().__rfloordiv__(other)
+    def __rlshift__(self, other): return self.eval().__rlshift__(other)
+    def __rmod__(self, other): return self.eval().__rmod__(other)
+    def __rmul__(self, other): return self.eval().__rmul__(other)
+    def __ror__(self, other): return self.eval().__ror__(other)
+    def __rpow__(self, other): return self.eval().__rpow__(other)
+    def __rrshift__(self, other): return self.eval().__rrshift__(other)
+    def __rsub__(self, other): return self.eval().__rsub__(other)
+    def __rtruediv__(self, other): return self.eval().__rtruediv__(other)
+    def __rxor__(self, other): return self.eval().__rxor__(other)
+
+
+    def __iadd__(self, other): return self.eval().__iadd__(other)
+    def __iand__(self, other): return self.eval().__iand__(other)
+    def __idiv__(self, other): return self.eval().__idiv__(other)
+    def __ifloordiv__(self, other): return self.eval().__ifloordiv__(other)
+    def __ilshift__(self, other): return self.eval().__ilshift__(other)
+    def __imod__(self, other): return self.eval().__imod__(other)
+    def __imul__(self, other): return self.eval().__imul__(other)
+    def __ior__(self, other): return self.eval().__ior__(other)
+    def __ipow__(self, other): return self.eval().__ipow__(other)
+    def __irshift__(self, other): return self.eval().__irshift__(other)
+    def __isub__(self, other): return self.eval().__isub__(other)
+    def __itruediv__(self, other): return self.eval().__itruediv__(other)
+    def __ixor__(self, other): return self.eval().__ixor__(other)
+
+
+    def __coerce__(self, other): return self.eval().__coerce__(other)
+    def __complex__(self): return self.eval().__complex__()
+    def __float__(self): return self.eval().__float__()
+    def __hex__(self): return self.eval().__hex__()
+    def __index__(self): return self.eval().__index__()
+    def __int__(self): return self.eval().__int__()
+    def __long__(self): return self.eval().__long__()
+    def __oct__(self): return self.eval().__oct__()
+    def __str__(self): return self.eval().__str__()
+    def __dir__(self): return self.eval().__dir__()
+    def __format__(self, formatstr): return self.eval().__format__(formatstr)
+    def __hash__(self): return self.eval().__hash__()
+    def __nonzero__(self): return self.eval().__nonzero__()
+    def __repr__(self): return self.eval().__repr__()
+    def __sizeof__(self): return self.eval().__sizeof__()
+    def __unicode__(self): return self.eval().__unicode__()
+
+    def __getitem__(self, key): return self.eval().__getitem__(key)
+    def __iter__(self): return self.eval().__iter__()
+    def __reversed__(self): return self.eval().__reversed__()
+    def __contains__(self, item): return self.eval().__contains__(item)
+    def __missing__(self, key): return self.eval().__missing__(key)
+
 class JS:
     '''
     JS handles the lifespan of JSchain objects and things like setting
@@ -541,12 +633,20 @@ class JS:
         self.linkset = {}
         self.linkcall = {}
 
+    @staticmethod
+    def _v(value):
+        if isinstance(value, JSchain):
+            return value.eval()
+        else:
+            return value
+
     def __getattr__(self, attr):
         chain = JSchain(self.state)
         chain._add(attr)
         return chain
 
     def __setattr__(self, attr, value):
+        value = JS._v(value)
         if attr == "state" or attr == "linkset" or attr == "linkcall":
             super(JS, self).__setattr__(attr, value)
             return value
@@ -558,6 +658,7 @@ class JS:
         pass
 
     def __setitem__(self, key, value):
+        value = JS._v(value)
         if key in self.linkcall:
             c = self.linkcall[key]
             if isinstance(c, JSchain):

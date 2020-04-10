@@ -1,12 +1,14 @@
 # Jyserver Web Framework with Pythonic Javascript Syntax
 
-Jyserver is a framework for simplifying the creation of interactive websites by providing real-time access to the browser's DOM and Javascript from the server using Python syntax. In addition it
+Jyserver is a framework for simplifying the creation of font ends
+for apps and kiosks by providing real-time access to the browser's DOM and 
+Javascript from the server using Python syntax. It also
 provides access to the Python code from the browser's Javascript.
 
 The difference between this framework and others (such as Django,
 Flask, etc.) is that jyserver uses Python dynamic syntax evaluation
 so that you can write Python code that will dynamically be converted
-to JS and executed on the browser. In addition, on the browser end,
+to JS and executed on the browser. On the browser end,
 it uses JS's dynamic Proxy object to rewrite JS code for execution by
 the server. All of this is done transparently without any additional
 libraries or code. See example below.

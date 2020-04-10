@@ -26,8 +26,7 @@ for i in range(100):
     js.statevar = {"c":123,"d":(5,"x",3)}
     js.statevar.c = 99
     js["info"] = "test%d" % i
-    m = js.statevar.eval()
-    print(m)
-    n = js.square(i).eval()
+    print(js.statevar.c)
+    n = js.square(i)
     print(i,n)
     time.sleep(1)
