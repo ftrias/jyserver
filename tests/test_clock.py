@@ -32,10 +32,10 @@ class App(Client):
 
     def main(self):
         self.start0 = time.time()
-        for _ in range(50):
+        for _ in range(100):
             if self.running:
                 self.js.dom.time.innerHTML = "{:.1f}".format(time.time() - self.start0)
-                time.sleep(0.1)
+            time.sleep(0.1)
  
 import webbrowser
 httpd = Server(App)
