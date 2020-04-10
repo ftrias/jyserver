@@ -12,7 +12,10 @@ clean:
 	rm -rf dist
 	rm -r *.egg-info
 
-inst: wheel
+install: wheel
 	pip install --force dist/jyserver-0.0.1-py3-none-any.whl
+
+upload: wheel
+	twine upload dist/*
 
 .PHONY: init test

@@ -13,14 +13,7 @@ it uses JS's dynamic Proxy object to rewrite JS code for execution by
 the server. All of this is done transparently without any additional
 libraries or code. See example below.
 
-This module uses threads and queues to ensure responsiveness.
-
-```
-Browser           Server
-Javascript  --->  execute as python server code
-JS & DOM    <---  execute statements
-            <---  query and change values
-```
+Tutorial: https://dev.to/ftrias/simple-kiosk-framework-in-python-2ane
 
 ## Example:
 
@@ -61,3 +54,89 @@ httpd = Server(App)
 print("serving at port", httpd.port)
 httpd.start()
 ```
+
+How does this work?
+
+1. After calling `httpd.start()`, the server will listen for new http requests.
+
+2. When "/" is requested, jyserver will insert special Javascript code into the HTML that enables communication before sending it to the browser. This code creates the `server` Proxy object.
+
+3. This injected code will cause the browser to send an asynchronous http request to the server asking for new commands for the browser to execute. Then it waits for a response in the background.
+
+4. When the user clicks on the button `reset`, the `server` Proxy object is called. It will extract the method name--in this case `reset`--and then make an http request to the server to execute that statement. 
+
+5. The server will receive this http request, look at the App class, find a method with that name and execute it.
+
+6. The executed method `reset()` first increases the variable `start0`. Then it begins building a Javascript command by using the special `self.js` command. `self.js` uses Python's dynamic language features `__getattr__`, `__setattr__`, etc. to build Javascript syntax on the fly. 
+
+7. When this "dynamic" statement get assigned a value (in our case `"0.0"`), it will get converted to Javascript and sent to the browser, which has been waiting for new commands in step 3. The statement will look like: `document.getElementById("time").innerHTML = "0.0"`
+
+8. The browser will get the statement, evaluate it and return the results to the server. Then the browser will query for new commands in the background.
+
+It seems complicated but this process usually takes less than a 0.01 seconds. If there are multiple statements to execute, they get queued and processed together, which cuts back on the back-and-forth chatter.
+
+All communication is initiated by the browser. The server only listens for special GET and POST requests.
+
+## Overview of operation
+
+| Browser   |   Server  |
+|-----------|-----------|
+| Request pages |  Send pages with injected Javascript |
+| Query for new commands | Send any queued commands |
+| As commands finish, send back results | Matche results with commands |
+| Send server statements for evaluation; wait for results |  Executes then and sends back results |
+
+## Other features
+
+### Assign callables in Python. 
+
+Functions are treated as first-class objects and can be assigned.
+
+```python
+class App(Client):
+    def __init__(self):
+        self.html = """
+<p id="time">WHEN</p>
+<button id="b2" onclick="server.stop()">Pause</button>
+"""
+    def stop(self):
+        self.running = False
+        self.js.dom.b2.onclick = self.restart
+    def restart(self):
+        self.running = True
+        self.js.dom.b2.onclick = self.stop
+```
+
+If a `main` function is given, it is executed. When it finishes, the server is terminate. If no `main` function is given, then the server
+enters an infinite loop.
+
+### Lazy evaluation provides live data
+
+Statements are evaluated lazily by `self.js`. This means that they are
+executed only when they are resolve to an actual value, which
+can cause some statements to be evaluated out of order. For example,
+consider:
+
+```python
+v = self.js.var1
+self.js.var1 = 10
+print(v)
+```
+
+Surprisinly, this will always return 10 no matter what `var1` is initially. This is because the assignment `v = self.js.var1` returns a Javascript object and not the actual value. 
+The object is sent to the browser to be evaluated 
+only when it is used by an operation. 
+Every time you use `v`, it will be sent to
+the browser for evaluation. Thus, it provides a live link to the data.
+
+This can be changed by calling `v = self.js.var1.eval()`, casting it or performing some operation.
+
+## Installation
+
+Available using pip or conda
+
+```bash
+pip install jyserver
+```
+
+Also available on github: https://github.com/ftrias/jyserver
