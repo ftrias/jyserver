@@ -12,7 +12,9 @@ browser. On the browser end, it uses JS's dynamic Proxy object to rewrite JS
 code for execution by the server. All of this is done transparently without any
 additional libraries or code. See example below.
 
-Tutorial: https://dev.to/ftrias/simple-kiosk-framework-in-python-2ane
+Documentation: [Class documentation](https://ftrias.github.io/jyserver/)
+
+Tutorial: [Dev.to article](https://dev.to/ftrias/simple-kiosk-framework-in-python-2ane)
 
 ## Example:
 
@@ -170,4 +172,4 @@ Available using pip or conda
 pip install jyserver
 ```
 
-Also available on github: https://github.com/ftrias/jyserver
+Also available on (github:ftrias/jyserver)[https://github.com/ftrias/jyserver]
