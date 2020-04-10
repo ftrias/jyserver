@@ -80,7 +80,8 @@ All communication is initiated by the browser. The server only listens for speci
 ## Overview of operation
 
 The browser initiates all communcation. The server listens for connections and sends
-respnses.
+respnses. Each page request is processed in its own thread and so results may finish
+out of order and any waiting does not stall either the browser or the server.
 
 | Browser   |   Server  |
 |-----------|-----------|
@@ -89,8 +90,10 @@ respnses.
 | As commands finish, send back results | Match results with commands |
 | Send server statements for evaluation; wait for results |  Executes then and sends back results |
 
-When the browser queries for new commands, the server returns any pending commands. If
-there are no pending commands, it waits for 5-10 seconds before closing the connection. The
+When the browser queries for new commands, the server returns any pending commands that the
+browser needs to execute. If
+there are no pending commands, it waits for 5-10 seconds for new commands to queue
+before closing the connection. The
 browser, upon getting and empty result will initiate a new connection to query for
 results. Thus, although there is always a connection open between the browser and server,
 this connection is reset every 5-10 seconds to avoid a timeout.
