@@ -183,7 +183,7 @@ class Server(ThreadingTCPServer):
     PORT = 8080
     allow_reuse_address = True
 
-    def __init__(self, appClass, port=PORT, ip=None):
+    def __init__(self, appClass, port=PORT, ip=None, verbose=False):
         '''
         Parameters
         -------------
@@ -195,6 +195,7 @@ class Server(ThreadingTCPServer):
         ip
             IP address to bind (default is all)
         '''
+        self.verbose = verbose
         # apps keeps track of running applications
         self.apps = {}
         # Instantiate objects of this class; must inherit from Client
@@ -242,14 +243,15 @@ class Server(ThreadingTCPServer):
         if uid and not isinstance(uid, str):
             # if uid is a cookie, get it's value
             uid = uid.value
+
         # existing app? return it
         if uid in self.apps:
             return self.apps[uid]
-        else:
+        elif create:
             # this is a new session, assign it a new id
             if uid is None:
                 uid = self._getNewUID()
-            # print("NEW APP", uid)
+            self.log_message("NEW APP %s", uid)
             # Instantiate Client, call initialize and save it.
             a = self.appClass()
             a._state = JSstate()
@@ -264,6 +266,7 @@ class Server(ThreadingTCPServer):
                 server_thread.daemon = True
                 server_thread.start()
             return a
+        raise ValueError(f"Invalid or empty seession id: {uid}")
 
     def _getQuery(self, uid, query):
         '''
@@ -305,7 +308,7 @@ class Server(ThreadingTCPServer):
         will return a string saying so. If there is an error during execution it will
         return a string with the error message.
         '''
-        print("RUN", function, args)
+        self.log_message("RUN %s %s", function, args)
         app = self._getApp(uid)
         if function == "_callfxn":
             # first argument is the function name
@@ -408,6 +411,10 @@ class Server(ThreadingTCPServer):
             server_thread = threading.Thread(target=self._runServer)
             server_thread.daemon = True
             server_thread.start()
+
+    def log_message(self, format, *args):
+        if self.verbose:
+            print(format % args)
 
 class Handler(SimpleHTTPRequestHandler):
     '''
@@ -518,7 +525,7 @@ class Handler(SimpleHTTPRequestHandler):
                 # the Browser is requesting we evaluate an expression and
                 # return the results.
                 script = self.server._getNextTask(self.uid)
-                # print("RUN", script)
+                self.log_message("EVAL JS %s", script)
                 self.reply(script)
         else:
             self.do_PAGE(data)
@@ -527,7 +534,7 @@ class Handler(SimpleHTTPRequestHandler):
         '''
         Process page requests except /state and /run.
         '''
-        print("PAGE", qry)
+        self.log_message("PAGE %s", qry)
         if os.path.exists(qry.path[1:]):
             # try to send a file with the given name if it exists.
             self.replyFile(qry.path[1:])
@@ -541,7 +548,8 @@ class Handler(SimpleHTTPRequestHandler):
                 self.reply(reply)
 
     def log_message(self, format, *args):
-        return
+        if self.server.verbose:
+            print(format % args)
 
 class JSstate:
     '''
@@ -711,7 +719,7 @@ class JSchain:
         '''
         for _ in range(10):
             if self.state._tasks.qsize() < 5:
-                print("ADD TASK", stmt)
+                self.log_message("ADD TASK %s", stmt)
                 self.state._tasks.put(stmt)
                 return
             time.sleep(0.1)

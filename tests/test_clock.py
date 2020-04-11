@@ -41,7 +41,7 @@ class App(Client):
             time.sleep(1)
  
 import webbrowser
-httpd = Server(App)
+httpd = Server(App, verbose=True)
 print("serving at port", httpd.port)
 webbrowser.open(f'http://localhost:{httpd.port}')
 httpd.start(cookies=False)
