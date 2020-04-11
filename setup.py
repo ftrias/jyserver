@@ -7,7 +7,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="jyserver",
-    version="0.0.1",
+    version="0.0.2",
     author="Fernando Trias",
     author_email="sub@trias.org",
     description="Web Framework with Pythonic Javascript Syntax",
@@ -19,6 +19,7 @@ setuptools.setup(
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
+        "Development Status :: 4 - Beta",
     ],
     python_requires='>=3.6',
 )

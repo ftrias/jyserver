@@ -139,13 +139,13 @@ class App(Client):
 ```
 
 If a `main` function is given, it is executed. When it finishes, the server is
-terminate. If no `main` function is given, then the server enters an infinite
-loop.
+terminated. If no `main` function is given, the server waits for requests in an
+infinite loop.
 
 ### Lazy evaluation provides live data
 
 Statements are evaluated lazily by `self.js`. This means that they are executed
-only when they are resolve to an actual value, which can cause some statements
+only when they are resolved to an actual value, which can cause some statements
 to be evaluated out of order. For example, consider:
 
 ```python
@@ -154,15 +154,16 @@ self.js.var1 = 10
 print(v)
 ```
 
-Surprisinly, this will always return `10` no matter what `var1` is initially.
-This is because the assignment `v = self.js.var1` returns a Javascript object
-and not the actual value. The object is sent to the browser to be evaluated only
-when it is used by an operation. Every time you use `v` in an operation, it will
-be sent to the browser for evaluation. Thus, it provides a live link to the
+This will always return `10` no matter what `var1` is initially. This is
+because the assignment `v = self.js.var1` assigns a Javascript object and not
+the actual value. The object is sent to the browser to be evaluated only when
+it is used by an operation. Every time you use `v` in an operation, it will be
+sent to the browser for evaluation. In this way, it provides a live link to the
 data.
 
-This can be changed by calling `v = self.js.var1.eval()`, casting it or
-performing some operation.
+This behavior can be changed by calling `v = self.js.var1.eval()`, casting it
+such as `v = int(self.js.var)` or performing some operation such as adding as in
+`v = self.js.var + 10`.
 
 ## Installation
 
