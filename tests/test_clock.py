@@ -31,11 +31,14 @@ class App(Client):
         self.js.dom.b2.onclick = self.stop
 
     def main(self):
+        self.js.var1 = 10
         self.start0 = time.time()
         for _ in range(100):
             if self.running:
+                self.js.var1 += 1
+                print(100 + self.js.var1)
                 self.js.dom.time.innerHTML = "{:.1f}".format(time.time() - self.start0)
-            time.sleep(0.1)
+            time.sleep(1)
  
 import webbrowser
 httpd = Server(App)

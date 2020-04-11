@@ -44,7 +44,7 @@ httpd.start()
 from socketserver import ThreadingTCPServer
 from http.server import SimpleHTTPRequestHandler
 from http.cookies import SimpleCookie
-from urllib.parse import urlparse, parse_qs, unquote
+from urllib.parse import urlparse, parse_qsl, unquote
 
 import json
 import threading
@@ -64,7 +64,8 @@ import uuid
 #                   is kept open by the server until a pending
 #                   command is issued, or a timeout. At the end of
 #                   the query, the function gets scheduled for execution
-#                   again.
+#                   again. We schedule it instead of calling so we
+#                   don't overflow the stack.
 #
 # sendBrowser(e, q) Evaluate expression `e` and then send the results
 #                   to the server. This is used by the server to
@@ -87,8 +88,9 @@ JSCRIPT = b"""
                 setTimeout(evalBrowser, 1);
             }
         }
-        request.open("GET", "/eval?session=" + UID);
-        request.send(null);
+        request.open("POST", "/_process_srv0");
+        request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+        request.send(JSON.stringify({"task":"eval", "session": UID}));
     }
     function sendBrowser(expression, query) {
         var value
@@ -101,17 +103,17 @@ JSCRIPT = b"""
             error = e.message 
         }
         var request = new XMLHttpRequest();
-        request.open("POST", "/state");
+        request.open("POST", "/_process_srv0");
         request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
-        request.send(JSON.stringify({ "session": UID, "value": value, "query": query, "error": error}));
+        request.send(JSON.stringify({"task":"state", "session":UID, "value":value, "query":query, "error": error}));
     }
     server  = new Proxy({}, { 
         get : function(target, property) { 
             return function(...args) {
                 var request = new XMLHttpRequest();
-                request.open("POST", "/run", false);
+                request.open("POST", "/_process_srv0", false);
                 request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
-                request.send(JSON.stringify({ "function": property, "session": UID, "args": args }));
+                request.send(JSON.stringify({"task":"run", "function":property, "session":UID, "args":args}));
                 if (request.status === 200) {
                     var result = JSON.parse(request.responseText)
                     return result
@@ -121,7 +123,6 @@ JSCRIPT = b"""
     });
     evalBrowser()
 """
-
 
 class Client:
     '''
@@ -136,6 +137,7 @@ class Client:
     html
         Optional HTML to send when "/" is requested. If neither
         `home` nor `html` are set, then it will send "index.html"
+    state
     
     Optional Methods
     ------------
@@ -163,16 +165,8 @@ class Client:
 
             def func(self, param1, param2)
     '''
-
-    def _initialize(self, server):
-        self._state = JSstate()
-        self.js = JS(self._state)
-        return self
-
-    def _callfxn(self, idx):
-        fxn = self._state._fxn[idx]
-        return fxn()
-
+    def __init__(self):
+        self.js : JSchain = None
 
 class Server(ThreadingTCPServer):
     '''
@@ -237,7 +231,7 @@ class Server(ThreadingTCPServer):
         '''
         return uuid.uuid1().hex
 
-    def _getApp(self, uid, create):
+    def _getApp(self, uid, create = False):
         '''
         Retrieve the Client instance for a given session id. If `create` is
         True, then if the app is not found a new one will be created. Otherwise
@@ -257,7 +251,9 @@ class Server(ThreadingTCPServer):
                 uid = self._getNewUID()
             # print("NEW APP", uid)
             # Instantiate Client, call initialize and save it.
-            a = self.appClass()._initialize(self)
+            a = self.appClass()
+            a._state = JSstate()
+            a.js = JS(a._state) # for access by Client class
             self.apps[uid] = a
             a.uid = uid
             # If there is a "main" function, then start a new thread to run it.
@@ -274,14 +270,14 @@ class Server(ThreadingTCPServer):
         Each query sent to the browser is assigned to it's own Queue to wait for 
         a response. This function returns the Queue for the given session id and query.
         '''
-        return self._getApp(uid, False)._state._queries[query]
+        return self._getApp(uid)._state._queries[query]
 
     def _getHome(self, uid):
         '''
         Get the home page when "/" is queried and inject the appropriate javascript
         code. Returns a byte string suitable for replying back to the browser.
         '''
-        app = self._getApp(uid, False)
+        app = self._getApp(uid)
         if hasattr(app, "html"):
             return self._insertJS(uid, app.html.encode("utf8"))
         elif hasattr(app, "home"):
@@ -298,7 +294,7 @@ class Server(ThreadingTCPServer):
         there are no tasks return None.
         '''
         try:
-            return self._getApp(uid, False)._state._tasks.get(timeout=1)
+            return self._getApp(uid)._state._tasks.get(timeout=1)
         except queue.Empty:
             return None
 
@@ -309,9 +305,19 @@ class Server(ThreadingTCPServer):
         will return a string saying so. If there is an error during execution it will
         return a string with the error message.
         '''
-        # print("RUN", function)
-        if hasattr(self._getApp(uid, False), function):
-            f = getattr(self._getApp(uid, False), function)
+        print("RUN", function, args)
+        app = self._getApp(uid)
+        if function == "_callfxn":
+            # first argument is the function name
+            # subsequent args are optional
+            fxn = args.pop(0)
+            f = app._state._fxn[fxn]
+        elif hasattr(app, function):
+            f = getattr(app, function)
+        else:
+            f = None
+
+        if f:
             try:
                 result = f(*args)
             except Exception as ex:
@@ -329,8 +335,9 @@ class Server(ThreadingTCPServer):
         execute it and return the results. If not, it will return "not found", status 404.
         '''
         fxn = path[1:].replace('/', '_')
-        if hasattr(self._getApp(uid, False), fxn):
-            f = getattr(self._getApp(uid, False), fxn)
+        app = self._getApp(uid)
+        if hasattr(app, fxn):
+            f = getattr(app, fxn)
             return f({"page": path, "query": query})
         return "Not found", 404
 
@@ -366,8 +373,12 @@ class Server(ThreadingTCPServer):
         '''
         Run the main function. When the function ends, terminate the server.
         '''
-        self._getApp(uid, True).main()
-        self.shutdown()
+        try:
+            self._getApp(uid, True).main()
+        except Exception as ex:
+            print("FATAL ERROR", ex)
+        finally:
+            self.shutdown()
 
     def _runServer(self):
         '''
@@ -397,7 +408,6 @@ class Server(ThreadingTCPServer):
             server_thread = threading.Thread(target=self._runServer)
             server_thread.daemon = True
             server_thread.start()
-
 
 class Handler(SimpleHTTPRequestHandler):
     '''
@@ -450,7 +460,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.cookies = SimpleCookie(self.headers.get('Cookie'))
 
         if hasattr(self, "uid"):
-            app = self.server._getApp(self.uid, False)
+            app = self.server._getApp(self.uid)
         else:
             app = None
         if app is None:
@@ -466,7 +476,16 @@ class Handler(SimpleHTTPRequestHandler):
         '''
         self.processCookies()
         qry = urlparse(self.path)
-        self.do_PAGE(qry)
+        req = dict(parse_qsl(qry.query))
+        if "session" in req:
+            self.uid = req["session"]
+        if qry.path == "/":
+            self.setNewUID()
+            self.reply(self.server._getHome(self.uid))
+        elif qry.path == "/appscript.js":
+            self.reply(JSCRIPT)
+        else:
+            self.do_PAGE(qry)
 
     def do_POST(self):
         '''
@@ -476,23 +495,31 @@ class Handler(SimpleHTTPRequestHandler):
         self.processCookies()
         l = int(self.headers["Content-length"])
         data = self.rfile.read(l)
-        req = json.loads(data)
-        self.uid = req["session"]
-        if self.path == "/state":
-            # The browser is replying to a request for data. First, find
-            # the corresponding Queue for our request.
-            q = self.server._getQuery(self.uid, req['query'])
-            # Add the results to the Queue, the code making the request is
-            # currently waiting with a get(). This will cause that code
-            # to wake up and process the results.
-            q.put(req)
-            # confirm to the server that we have processed this.
-            self.reply(str(req))
-        elif self.path == "/run":
-            # here, the browser is requesting we execute a statement and
-            # return the results.
-            result = self.server._run(self.uid, req['function'], req['args'])
-            self.reply(json.dumps(JS._v(result)))
+        if self.path == "/_process_srv0":
+            req = json.loads(data)
+            self.uid = req["session"]
+            task = req["task"]
+            if task == "state":
+                # The browser is replying to a request for data. First, find
+                # the corresponding Queue for our request.
+                q = self.server._getQuery(self.uid, req['query'])
+                # Add the results to the Queue, the code making the request is
+                # currently waiting with a get(). This will cause that code
+                # to wake up and process the results.
+                q.put(req)
+                # confirm to the server that we have processed this.
+                self.reply(str(req))
+            elif task == "run":
+                # here, the browser is requesting we execute a statement and
+                # return the results.
+                result = self.server._run(self.uid, req['function'], req['args'])
+                self.reply(json.dumps(JS._v(result)))
+            elif task == "eval":
+                # the Browser is requesting we evaluate an expression and
+                # return the results.
+                script = self.server._getNextTask(self.uid)
+                # print("RUN", script)
+                self.reply(script)
         else:
             self.do_PAGE(data)
 
@@ -500,33 +527,21 @@ class Handler(SimpleHTTPRequestHandler):
         '''
         Process page requests except /state and /run.
         '''
-        # print("PAGE", qry)
-        req = parse_qs(qry.query)
-        if "session" in req:
-            self.uid = req["session"][0]
-        if qry.path == "/":
-            self.setNewUID()
-            self.reply(self.server._getHome(self.uid))
-        elif qry.path == "/eval":
-            # the Browser is requesting we evaluate an expression and
-            # return the results.
-            script = self.server._getNextTask(self.uid)
-            # print("RUN", script)
-            self.reply(script)
-        elif qry.path == "/appscript.js":
-            self.reply(JSCRIPT)
-        elif os.path.exists(qry.path[1:]):
-            # try to send a file with the diven name if it exists.
+        print("PAGE", qry)
+        if os.path.exists(qry.path[1:]):
+            # try to send a file with the given name if it exists.
             self.replyFile(qry.path[1:])
         else:
             # otherwise, pass on the request to the Client object. It will
             # execute a method with the same name if it exists.
-            reply = self.server._page(self.uid, qry.path, req)
+            reply = self.server._page(self.uid, qry.path, qry)
             if isinstance(reply, list) or isinstance(reply, tuple):
                 self.reply(*reply)
             else:
                 self.reply(reply)
 
+    def log_message(self, format, *args):
+        return
 
 class JSstate:
     '''
@@ -550,7 +565,7 @@ class JSstate:
         self._tasks = queue.Queue()
         self._fxn = {}
         self._queries = {}
-
+        self._error = None
 
 class JSchain:
     '''
@@ -602,6 +617,10 @@ class JSchain:
         Add item to the chain. If `dot` is True, then a dot is added. If
         not, this is probably a function call and not dot should be added.
         '''
+        if not attr:
+            # this happens when __setattr__ is called when the first
+            # item of a JSchain is an assignment
+            return self
         if dot and len(self.chain) > 0:
             self.chain.append(".")
         self.chain.append(attr)
@@ -647,10 +666,12 @@ class JSchain:
             # is this a function call?
             idx = id(value)
             self.state._fxn[idx] = value
-            self._add(f"{attr}=function(){{server._callfxn({idx});}}")
+            self._add(attr)
+            self._add(f"=function(){{server._callfxn({idx});}}", dot=False)
         else:
             # otherwise, regular assignment
-            self._add(attr + "=" + json.dumps(value))
+            self._add(attr)
+            self._add("=" + json.dumps(value), dot=False)
         return self
 
     def __call__(self, *args, **kwargs):
@@ -690,10 +711,11 @@ class JSchain:
         '''
         for _ in range(10):
             if self.state._tasks.qsize() < 5:
-                break
-            # if self.state._tasks.empty(): break
+                print("ADD TASK", stmt)
+                self.state._tasks.put(stmt)
+                return
             time.sleep(0.1)
-        self.state._tasks.put(stmt)
+        self.state._error = TimeoutError("Timeout inserting task: " + stmt)
 
     def __del__(self):
         '''
@@ -837,20 +859,6 @@ class JSchain:
     def __rtruediv__(self, other): return self.eval().__rtruediv__(other)
     def __rxor__(self, other): return self.eval().__rxor__(other)
 
-    def __iadd__(self, other): return self.eval().__iadd__(other)
-    def __iand__(self, other): return self.eval().__iand__(other)
-    def __idiv__(self, other): return self.eval().__idiv__(other)
-    def __ifloordiv__(self, other): return self.eval().__ifloordiv__(other)
-    def __ilshift__(self, other): return self.eval().__ilshift__(other)
-    def __imod__(self, other): return self.eval().__imod__(other)
-    def __imul__(self, other): return self.eval().__imul__(other)
-    def __ior__(self, other): return self.eval().__ior__(other)
-    def __ipow__(self, other): return self.eval().__ipow__(other)
-    def __irshift__(self, other): return self.eval().__irshift__(other)
-    def __isub__(self, other): return self.eval().__isub__(other)
-    def __itruediv__(self, other): return self.eval().__itruediv__(other)
-    def __ixor__(self, other): return self.eval().__ixor__(other)
-
     def __coerce__(self, other): return self.eval().__coerce__(other)
     def __complex__(self): return self.eval().__complex__()
     def __float__(self): return self.eval().__float__()
@@ -909,9 +917,16 @@ class JS:
 
     def __getattr__(self, attr):
         '''
-        Called when using "." operator for the first time. Create a new chaing and to it.
+        Called when using "." operator for the first time. Create a new chain and use it.
         Subsequent "." operators get processed by JSchain.
         '''
+        # rasise any pending errors; these errors can get
+        # generate on __del__() or other places that Python
+        # will ignore.
+        if self.state._error:
+            e = self.state._error
+            self.state._error = None
+            raise e
         chain = JSchain(self.state)
         chain._add(attr)
         return chain
@@ -927,8 +942,10 @@ class JS:
         if attr == "state" or attr == "linkset" or attr == "linkcall":
             super(JS, self).__setattr__(attr, value)
             return value
+        # create a new JSchain
         c = self.__getattr__(attr)
-        c._add("=" + json.dumps(value), dot=False)
+        c.__setattr__(None, value)
+        # c._add("=" + json.dumps(value), dot=False)
         return c
 
     def __getitem__(self, key):
