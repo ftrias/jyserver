@@ -6,12 +6,19 @@ import time
 
 class App(Client):
     def __init__(self):
-        self.html = """
-<p id="time">WHEN</p>
-<button id="b1" onclick="server.reset()">Reset</button>
-<button id="b2" onclick="server.stop()">Pause</button>
-"""
+        self.start0 = time.time()
         self.running = True
+
+    def isRunning(self):
+        return self.running
+
+    def failtask(self, v, v2):
+        print(v, v2)
+        print(self.js.dom.time.innerHTML)
+
+    def reenter(self, v, v2):
+        print(v, v2)
+        self.js.dom.tx.innerHTML = "Tested!"
 
     def reset(self):
         self.start0 = time.time()
@@ -30,18 +37,45 @@ class App(Client):
         self.js.dom.b2.innerHTML = "Pause"
         self.js.dom.b2.onclick = self.stop
 
-    def main(self):
-        self.js.var1 = 10
-        self.start0 = time.time()
-        for _ in range(100):
-            if self.running:
-                self.js.var1 += 1
-                print(100 + self.js.var1)
-                self.js.dom.time.innerHTML = "{:.1f}".format(time.time() - self.start0)
+    def clickme(self):
+        count = 0
+        page = self.h(html="""
+Please click again and again: <p id="text">COUNT</p>
+Or <a href="/">go back</a>'
+""")
+        while page.alive():
+            count += 1
+            self.js.dom.text.innerHTML = count
             time.sleep(1)
+        print("clickme done")
+
+    def index(self):
+        page = self.h(html="""
+<script>
+function executeTask() {
+    app.running = !app.running;
+    console.log("running =", app.running);
+    console.log("isrunning =", app.isRunning());
+    console.log("isrunning =", app.reenter(99, 15));
+}
+</script>
+<p id="tx">R</p>
+<p id="time">NOW</p>
+<button id="b1" onclick="server.reset()">Reset to 0</button>
+<button id="b2" onclick="server.stop()">Pause on server</button>
+<button id="b3" onclick="executeTask()">Pause from JS</button>
+<button id="b4" onclick="app.failtask(10,15)">Cause exception</button>
+<button id="b4" onclick="app.failtask()">Cause exception2</button>
+<a href="clickme">page2</a>
+""")
+        while page.alive():
+            if self.running:
+                self.js.dom.time.innerHTML = "{:.1f}".format(time.time() - self.start0)
+            time.sleep(.1)
+        print("index done")
  
-import webbrowser
-httpd = Server(App, verbose=True)
+httpd = Server(App, verbose=False)
 print("serving at port", httpd.port)
-webbrowser.open(f'http://localhost:{httpd.port}')
-httpd.start(cookies=False)
+# import webbrowser
+# webbrowser.open(f'http://localhost:{httpd.port}')
+httpd.start(cookies=True)

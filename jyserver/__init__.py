@@ -46,6 +46,10 @@ from http.server import SimpleHTTPRequestHandler
 from http.cookies import SimpleCookie
 from urllib.parse import urlparse, parse_qsl, unquote
 
+from inspect import signature
+import ctypes
+import traceback
+
 import json
 import threading
 import queue
@@ -59,6 +63,15 @@ import uuid
 # This is the Javascript code that gets injected into the HTML
 # page.
 #
+# server            Proxy class for asynchronous execution of commands
+#                   on the server. This class does not return a value.
+#
+# app               Proxy class that for synchronous exection. Will
+#                   return a value. However, if used while a page
+#                   update is in progress, it will fail.
+#
+# Other functions used internally:
+#
 # evalBrowser()     Queries the server for any pending commands. If
 #                   there are no pending commands, the connection
 #                   is kept open by the server until a pending
@@ -67,15 +80,22 @@ import uuid
 #                   again. We schedule it instead of calling so we
 #                   don't overflow the stack.
 #
-# sendBrowser(e, q) Evaluate expression `e` and then send the results
+# sendFromBrowserToServer(e, q) 
+#                   Evaluate expression `e` and then send the results
 #                   to the server. This is used by the server to
 #                   resolve Javascript statements.
 #
-# server            Proxy class that is used by the web browser's
-#                   Javascript code to evaluate statements on
-#                   the server.
+# sendErrorToServer(e)
+#                   Send a client expcetion to the server for error
+#                   handling.
+#
+# closeBrowserWindow()
+#                   Called when a page is terminated so server can
+#                   stop processing it.
 #
 JSCRIPT = b"""
+    if (typeof UID === "undefined") { UID = "COOKIE"; }
+    if (typeof PAGEID === "undefined") { PAGEID = "COOKIE"; }
     function evalBrowser() {
         var request = new XMLHttpRequest();
         request.onreadystatechange = function() {
@@ -83,16 +103,20 @@ JSCRIPT = b"""
                 try {
                     // console.log(request.responseText)
                     eval(request.responseText)
+                    setTimeout(evalBrowser, 1);
                 }
-                catch(e) {}
-                setTimeout(evalBrowser, 1);
+                catch(e) {
+                    console.log(e)
+                    setTimeout(function(){sendErrorToServer(request.responseText, e.message);}, 1);
+                    setTimeout(evalBrowser, 10);
+                }
             }
         }
         request.open("POST", "/_process_srv0");
         request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
-        request.send(JSON.stringify({"task":"eval", "session": UID}));
+        request.send(JSON.stringify({"session": PAGEID, "task":"next"}));
     }
-    function sendBrowser(expression, query) {
+    function sendFromBrowserToServer(expression, query) {
         var value
         var error = ""
         try {
@@ -105,25 +129,94 @@ JSCRIPT = b"""
         var request = new XMLHttpRequest();
         request.open("POST", "/_process_srv0");
         request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
-        request.send(JSON.stringify({"task":"state", "session":UID, "value":value, "query":query, "error": error}));
+        request.send(JSON.stringify({"session":PAGEID, "task":"state", "value":value, "query":query, "error": error}));
     }
-    server  = new Proxy({}, { 
+    function sendErrorToServer(expr, e) {
+        var request = new XMLHttpRequest();
+        request.open("POST", "/_process_srv0");
+        request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+        request.send(JSON.stringify( {"session":PAGEID, "task":"error", "error":e, "expr":expr} ));
+    }
+    function closeBrowserWindow() {
+        var request = new XMLHttpRequest();
+        request.open("POST", "/_process_srv0");
+        request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+        request.send(JSON.stringify({"session":PAGEID, "task":"unload"}));
+    }
+    server = new Proxy({}, { 
         get : function(target, property) { 
             return function(...args) {
                 var request = new XMLHttpRequest();
-                request.open("POST", "/_process_srv0", false);
-                request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
-                request.send(JSON.stringify({"task":"run", "function":property, "session":UID, "args":args}));
-                if (request.status === 200) {
-                    var result = JSON.parse(request.responseText)
-                    return result
+                request.onreadystatechange = function() {
+                    if (request.readyState==4 && request.status==200){
+                        console.log("Async results", property, request.responseText)
+                    }
                 }
+                request.open("POST", "/_process_srv0");
+                request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+                request.send(JSON.stringify({"session":PAGEID, "task":"async", "function":property, "args":args}));
             }            
         }
     });
-    evalBrowser()
+    function handleApp(property, args) { 
+        var request = new XMLHttpRequest();
+        request.open("POST", "/_process_srv0", false);
+        request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+        request.send(JSON.stringify({"session":PAGEID, "task":"run", "block":true, "function":property, "args":args}));
+        if (request.status === 200) {
+            var result = JSON.parse(request.responseText)
+            if ("error" in result) {
+                console.log("ERROR", result["error"]);
+                throw result["error"];
+                return null;
+            }
+            if (result["type"] == "expression") {
+                return eval(result["expression"])
+            }
+            else {
+                return result["value"]
+            }
+        }
+    }
+    function handleAppProperty(property) { 
+        var request = new XMLHttpRequest();
+        request.open("POST", "/_process_srv0", false);
+        request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+        request.send(JSON.stringify({"session":PAGEID, "task":"get", "block":true, "expression":property}));
+        if (request.status === 200) {
+            var result = JSON.parse(request.responseText)
+            if ("error" in result) {
+                console.log("ERROR", result["error"]);
+                throw result["error"];
+                return null;
+            }
+            if (result["type"] == "expression") {
+                return eval(result["expression"])
+            }
+            else {
+                return result["value"]
+            }
+        }
+    }
+    function handleAppSetProperty(property, value) { 
+        var request = new XMLHttpRequest();
+        request.open("POST", "/_process_srv0", false);
+        request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+        request.send(JSON.stringify({"session":PAGEID, "task":"set", "property":property, "value":value}));
+        return value
+    }
+    app = new Proxy({}, { 
+        get : function(target, prop) { 
+            return handleAppProperty(prop)
+        },
+        set : function(target, prop, value) { 
+            return handleAppSetProperty(prop, value)
+        }
+    });
+    window.addEventListener("beforeunload", function(event) { closeBrowserWindow(); });
+    window.addEventListener("load", function(event) { evalBrowser(); });
 """
-
+    
 class Client:
     '''
     Client class contains all methods and code that is executed on the server
@@ -137,7 +230,16 @@ class Client:
     html
         Optional HTML to send when "/" is requested. If neither
         `home` nor `html` are set, then it will send "index.html"
-    state
+    js
+        JS object for constructing and executing Javascript.
+
+    Methods
+    -----------
+
+    h(file, html)
+        Return appropriate HTML for the active page. Can only
+        be called once per page. Must be called if implementing
+        custom pages.
     
     Optional Methods
     ------------
@@ -146,6 +248,11 @@ class Client:
         If this is implemented, then the server will begin execution of this
         function immediately. The server will terminate when this function
         terminates.
+
+    * index(self)
+
+        If `index` is defined, it will execute this function. The function
+        is responsible for returning the HTML with the h() method.
 
     * page(self)
 
@@ -163,10 +270,134 @@ class Client:
 
         then this method will be called:
 
-            def func(self, param1, param2)
+            def func(self, 15, 65)
     '''
     def __init__(self):
-        self.js : JSchain = None
+        self.js     : JSchain = None
+        self._state : JSstate = None
+        self.uid              = None
+        self._handler:Handler = None
+        self._signal : threading.Event = None
+
+    def h(self, html=None, file=None):
+        '''
+        Convert text to html and wrap with script code. Return the HTML as a
+        byte string. Must be called if implementing a custom page
+        such as `index`.
+        '''
+        page = HtmlPage(html=html, file=file)
+        html = page.html(self.uid)
+        # html = self._state._server._insertJS(self.uid, text.encode("utf8"))
+        self._handler.reply(html)
+        self._state._server.log_message("SET SIGNAL %s", id(self._signal))
+        self._signal.set()
+        return page
+
+class ClientApp:
+    def __init__(self, cls):
+        self.appClass = cls
+        self.obj = None
+
+    def hasMethod(self, name):
+        return hasattr(self.obj, name)
+
+    def callMethod(self, name, args):
+        if hasattr(self.obj, name):
+            f = getattr(self.obj, name)
+            if args is None:
+                f()
+            else:
+                f(*args)
+        else:
+            raise ValueError("Method not found: " + name)
+
+    def getJS(self):
+        return self.obj.js
+
+class HtmlPage:
+    # Patterns for matching HTML to figure out where to inject the javascript code
+    _pscript = re.compile(
+        b'\\<script.*\\s+src\\s*=\\s*"appscript.js"')
+    _plist = [re.compile(b'\\{\\{JSCRIPT\\}\\}', re.IGNORECASE),
+        re.compile(b'\\<script\\>', re.IGNORECASE),
+        re.compile(b'\\<\\/head\\>', re.IGNORECASE),
+        re.compile(b'\\<body\\>', re.IGNORECASE),
+        re.compile(b'\\<html\\>', re.IGNORECASE)]
+
+    pageMap = {}
+    pageActive = {}
+    pageThread = {}
+                       
+    def __init__(self, html=None, file=None):
+        if file:
+            with open(file, "rb") as f:
+                self.result = f.read()
+        elif html:
+            if isinstance(html, bytes):
+                self.result = html
+            else:
+                self.result = html.encode("utf8")
+        else:
+            self.result = None
+        self.pageid = uuid.uuid1().hex
+
+    def alive(self):
+        return self.pageid in self.pageActive
+
+    @classmethod
+    def expire(cls, item=None):
+        if item:
+            del cls.pageActive[item]
+            del cls.pageMap[item]
+            
+        old = time.time() - 5
+        remove = []
+        for k,v in cls.pageActive.items():
+            if v < old:
+                remove.append(k)
+        for k in remove:
+            del cls.pageActive[k]
+            del cls.pageMap[k]
+
+    def html(self, uid):
+        '''
+        Once the page has been loaded, this will return the appropriate
+        HTML for the uid given.
+        '''
+        return self.insertJS(uid, self.result)
+
+    def insertJS(self, uid, html):
+        '''
+        Insert the Javascript library into HTML. The strategy is that it will look for patterns
+        to figure out where to insert. If "<script src="appjscript.js">" is found, it will not
+        make changes and will return the Javascript when the browser requests the appjscript.js
+        file. Otherwise, it will insert it into a <script> section, the <head> or at the start
+        of the HTML. In any case, this function will insert the global variable UID containing
+        the session id.
+        '''
+        self.pageMap[self.pageid] = uid
+        self.pageThread[self.pageid] = threading.get_ident()
+        self.pageActive[self.pageid] = time.time()
+
+        U = "var UID='{}';var PAGEID='{}';\n".format(uid, self.pageid).encode("utf8")
+        m = self._pscript.search(html)
+        if m:
+            sx, ex = m.span()
+            return html[:sx] + b"<script>"+U+b"</script>" + html[sx:]
+        for i, p in enumerate(self._plist):
+            m = p.search(html)
+            if m:
+                sx, ex = m.span()
+                if i == 0:
+                    return html[:sx] + U + JSCRIPT + html[ex:]
+                elif i == 1:
+                    return html[:sx] + b"<script>" + U + JSCRIPT + b"</script>" + html[sx:]
+                elif i == 2:
+                    return html[:sx] + b"<script>" + U + JSCRIPT + b"</script>" + html[sx:]
+                else:
+                    return html[:sx] + b"<head><script>" + U + JSCRIPT + b"</script></head>" + html
+        return b"<head><script>" + U + JSCRIPT + b"</script></head>" + html
+
 
 class Server(ThreadingTCPServer):
     '''
@@ -207,7 +438,7 @@ class Server(ThreadingTCPServer):
         # Patterns for matching HTML to figure out where to inject the javascript code
         self._pscript = re.compile(
             b'\\<script.*\\s+src\\s*=\\s*"appscript.js"')
-        self._plist = [re.compile(b'\\{JSCRIPT\\}', re.IGNORECASE),
+        self._plist = [re.compile(b'\\{\\{JSCRIPT\\}\\}', re.IGNORECASE),
                        re.compile(b'\\<script\\>', re.IGNORECASE),
                        re.compile(b'\\<\\/head\\>', re.IGNORECASE),
                        re.compile(b'\\<body\\>', re.IGNORECASE),
@@ -244,17 +475,26 @@ class Server(ThreadingTCPServer):
             # if uid is a cookie, get it's value
             uid = uid.value
 
+        # if we're not using cookies, direct links have uid of None
+        if uid is None:
+            # get first key
+            if len(self.apps) > 0:
+                uid = list(self.apps.items())[0][0]
+            else:
+                uid = None
+
         # existing app? return it
         if uid in self.apps:
             return self.apps[uid]
-        elif create:
-            # this is a new session, assign it a new id
-            if uid is None:
+        else:
+            # this is a new session or invalid session
+            # assign it a new id
+            if not self.single:
                 uid = self._getNewUID()
             self.log_message("NEW APP %s", uid)
             # Instantiate Client, call initialize and save it.
             a = self.appClass()
-            a._state = JSstate()
+            a._state = JSstate(self)
             a.js = JS(a._state) # for access by Client class
             self.apps[uid] = a
             a.uid = uid
@@ -282,14 +522,24 @@ class Server(ThreadingTCPServer):
         '''
         app = self._getApp(uid)
         if hasattr(app, "html"):
-            return self._insertJS(uid, app.html.encode("utf8"))
+            block = app.html.encode("utf8")
+            page = HtmlPage(block)
+            app.activePage = page.pageid
+            return page.html(uid)
         elif hasattr(app, "home"):
             path = app.home
-        else:
+        elif os.path.exists("index.html"):
             path = "index.html"
+        elif hasattr(app, "index"):
+            return app.index
+        else:
+            raise ValueError("Could not find index or home")
+
         with open(path, "rb") as f:
             block = f.read()
-            return self._insertJS(uid, block)
+            page = HtmlPage(block)
+            app.activePage = page.pageid
+            return page.html(uid)
 
     def _getNextTask(self, uid):
         '''
@@ -297,11 +547,19 @@ class Server(ThreadingTCPServer):
         there are no tasks return None.
         '''
         try:
-            return self._getApp(uid)._state._tasks.get(timeout=1)
+            self.log_message("TASKS WAITING %d ON %d", self._getApp(uid)._state._tasks.qsize(), id(self._getApp(uid)._state._tasks))
+            return self._getApp(uid)._state._tasks.get(timeout=10)
         except queue.Empty:
             return None
 
-    def _run(self, uid, function, args):
+    def _addEndTask(self, uid):
+        '''
+        Add a None task to end the queue.
+        '''
+        self.log_message("TASKS END %d ON %d", self._getApp(uid)._state._tasks.qsize(), id(self._getApp(uid)._state._tasks))
+        self._getApp(uid)._state._tasks.put(None)
+
+    def _run(self, uid, function, args, block=True):
         '''
         Called by the framework to execute a method. This function will look for a method
         with the given name. If it is found, it will execute it. If it is not found it
@@ -310,67 +568,73 @@ class Server(ThreadingTCPServer):
         '''
         self.log_message("RUN %s %s", function, args)
         app = self._getApp(uid)
-        if function == "_callfxn":
-            # first argument is the function name
-            # subsequent args are optional
-            fxn = args.pop(0)
-            f = app._state._fxn[fxn]
-        elif hasattr(app, function):
-            f = getattr(app, function)
-        else:
-            f = None
+        if block:
+            if not app._state._lock.acquire(blocking = False):
+                raise RuntimeError("App is active and would block")
+        
+        try:
+            if function == "_callfxn":
+                # first argument is the function name
+                # subsequent args are optional
+                fxn = args.pop(0)
+                f = app._state._fxn[fxn]
+            elif callable(function):
+                f = function
+            elif hasattr(app, function):
+                f = getattr(app, function)
+            else:
+                f = None
 
-        if f:
-            try:
-                result = f(*args)
-            except Exception as ex:
-                result = str(ex)
-        else:
-            result = "Unsupported: " + function + "(" + str(args) + ")"
-        return result
+            if f:
+                try:
+                    result = f(*args)
+                    ret = json.dumps({"value":JS._v(result)})
+                except Exception as ex:
+                    traceback.print_exc()
+                    s = str(ex)
+                    self.log_message("Exception %s", s)
+                    ret = json.dumps({"error":s})
+            else:
+                result = "Unsupported: " + function + "(" + str(args) + ")"
+                ret = json.dumps({"error":str(result)})
+            self.log_message("RUN RESULT %s", ret)
+            return ret
+        finally:
+            if block:
+                app._state._lock.release()
 
-    def _page(self, uid, path, query):
+    def _get(self, uid, expr):
         '''
-        Called by framework to return a queried page. When the browser requests a web page
-        (for example when a user clicks on a link), the path will get put in `path` and
-        any paramters passed through GET or POST will get passed in `query`. This will
-        look for a Client method with the same name as the page requested. If found, it will
-        execute it and return the results. If not, it will return "not found", status 404.
+        Called by the framework to execute a method. This function will look for a method
+        with the given name. If it is found, it will execute it. If it is not found it
+        will return a string saying so. If there is an error during execution it will
+        return a string with the error message.
         '''
-        fxn = path[1:].replace('/', '_')
+        self.log_message("GET EXPR %s", expr)
         app = self._getApp(uid)
-        if hasattr(app, fxn):
-            f = getattr(app, fxn)
-            return f({"page": path, "query": query})
-        return "Not found", 404
-
-    def _insertJS(self, uid, html):
-        '''
-        Insert the Javascript library into HTML. The strategy is that it will look for patterns
-        to figure out where to insert. If "<script src="appjscript.js">" is found, it will not
-        make changes and will return the Javascript when the browser requests the appjscript.js
-        file. Otherwise, it will insert it into a <script> section, the <head> or at the start
-        of the HTML. In any case, this function will insert the global variable UID containing
-        the session id.
-        '''
-        U = "var UID='{}';\n".format(uid).encode("utf8")
-        m = self._pscript.search(html)
-        if m:
-            sx, ex = m.span()
-            return html[:sx] + "<script>"+U+"</script>" + html[sx:]
-        for i, p in enumerate(self._plist):
-            m = p.search(html)
-            if m:
-                sx, ex = m.span()
-                if i == 0:
-                    return html[:sx] + U + JSCRIPT + html[ex:]
-                elif i == 1:
-                    return html[:sx] + b"<script>" + U + JSCRIPT + b"</script>" + html[sx:]
-                elif i == 2:
-                    return html[:sx] + b"<script>" + U + JSCRIPT + b"</script>" + html[sx:]
+        if not app._state._lock.acquire(blocking = False):
+            raise RuntimeError("App is active and would block")
+        
+        try:
+            if hasattr(app, expr):
+                value = getattr(app, expr)
+                if callable(value):
+                    value = f"(function(...args) {{ return handleApp('{expr}', args) }})"  
+                    return json.dumps({"type":"expression", "expression":value})       
                 else:
-                    return html[:sx] + b"<head><script>" + U + JSCRIPT + b"</script></head>" + html
-        return b"<head><script>" + U + JSCRIPT + b"</script></head>" + html
+                    return json.dumps({"type":"value", "value":value})
+            return None
+        finally:
+            app._state._lock.release()
+
+    def _set(self, uid, expr, value):
+        '''
+        Called by the framework to set a propery.
+        '''
+        self.log_message("SET EXPR %s = %s", expr, value)
+        app = self._getApp(uid)
+        app.__setattr__(expr, value)
+        return value
 
     def _mainRun(self, uid):
         '''
@@ -379,7 +643,7 @@ class Server(ThreadingTCPServer):
         try:
             self._getApp(uid, True).main()
         except Exception as ex:
-            print("FATAL ERROR", ex)
+            self.log_message("FATAL ERROR: ", ex)
         finally:
             self.shutdown()
 
@@ -415,6 +679,8 @@ class Server(ThreadingTCPServer):
     def log_message(self, format, *args):
         if self.verbose:
             print(format % args)
+    def log_error(self, format, *args):
+        print(format % args)
 
 class Handler(SimpleHTTPRequestHandler):
     '''
@@ -432,12 +698,19 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header(
                 "Set-Cookie", self.cookies.output(header='', sep=''))
         self.end_headers()
+
         if data is None:
             return
-        if isinstance(data, bytes):
+
+        if isinstance(data, str):
+            data = data.encode("utf8")
+
+        try:
             self.wfile.write(data)
-        else:
-            self.wfile.write(data.encode("utf8"))
+            self.log_message("REPLY DONE")
+        except Exception as ex:
+            traceback.print_exc()
+            self.server.log_error("Error sending: %s", str(ex))
 
     def replyFile(self, path, num=200):
         '''
@@ -445,7 +718,8 @@ class Handler(SimpleHTTPRequestHandler):
         '''
         with open(path, "rb") as f:
             block = f.read()
-            result = self.server._insertJS(self.uid, block)
+            result = HtmlPage(block).html(self.uid)
+            # result = self.server._insertJS(self.uid, block)
             self.reply(result)
 
     def processCookies(self):
@@ -477,6 +751,8 @@ class Handler(SimpleHTTPRequestHandler):
         if self.server.useCookies:
             self.cookies["UID"] = self.uid
 
+        return app
+
     def do_GET(self):
         '''
         Called by parent to process GET requests. Forwards requests to do_PAGE.
@@ -484,11 +760,21 @@ class Handler(SimpleHTTPRequestHandler):
         self.processCookies()
         qry = urlparse(self.path)
         req = dict(parse_qsl(qry.query))
+        self.server.log_message("GET %s %s", qry, req)
         if "session" in req:
-            self.uid = req["session"]
-        if qry.path == "/":
+            pageid = req["session"]
+            self.uid = HtmlPage.pageMap[pageid]
+        else:
             self.setNewUID()
-            self.reply(self.server._getHome(self.uid))
+
+        if qry.path == "/":
+            result = self.server._getHome(self.uid)
+            if callable(result):
+                self.server.log_message("HOME CALL %s", result)
+                self._page(self.uid, result, qry)
+            else:
+                self.server.log_message("HOME SEND %s", result)
+                self.reply(result)
         elif qry.path == "/appscript.js":
             self.reply(JSCRIPT)
         else:
@@ -502,10 +788,21 @@ class Handler(SimpleHTTPRequestHandler):
         self.processCookies()
         l = int(self.headers["Content-length"])
         data = self.rfile.read(l)
+        self.server.log_message("POST %s", data)
         if self.path == "/_process_srv0":
             req = json.loads(data)
-            self.uid = req["session"]
+            pageid = req["session"]
+            if pageid in HtmlPage.pageMap:
+                self.uid = HtmlPage.pageMap[pageid]
+            else:
+                self.reply('Invalid pageid seession', 404)
+                return
+                # raise RuntimeError("Invalid pageid session: " + pageid)
+   
+            HtmlPage.pageActive[pageid] = time.time()
+
             task = req["task"]
+            self.server.log_message("TASK %s %s", task, pageid)
             if task == "state":
                 # The browser is replying to a request for data. First, find
                 # the corresponding Queue for our request.
@@ -520,13 +817,37 @@ class Handler(SimpleHTTPRequestHandler):
                 # here, the browser is requesting we execute a statement and
                 # return the results.
                 result = self.server._run(self.uid, req['function'], req['args'])
+                self.reply(result)
+            elif task == "get":
+                # here, the browser is requesting we execute a statement and
+                # return the results.
+                result = self.server._get(self.uid, req['expression'])
+                self.reply(result)
+            elif task == "set":
+                # here, the browser is requesting we execute a statement and
+                # return the results.
+                result = self.server._set(self.uid, req['property'], req['value'])
+                self.reply('')
+            elif task == "async":
+                # here, the browser is requesting we execute a statement and
+                # return the results.
+                result = self.server._run(self.uid, req['function'], req['args'], block=False)
                 self.reply(json.dumps(JS._v(result)))
-            elif task == "eval":
+            elif task == "next":
                 # the Browser is requesting we evaluate an expression and
                 # return the results.
                 script = self.server._getNextTask(self.uid)
-                self.log_message("EVAL JS %s", script)
+                self.log_message("NEXT TASK REQUESTED IS JS %s", script)
                 self.reply(script)
+            elif task == "error":
+                self.reply('')
+                raise RuntimeError(req['error'] + ": " + req["expr"])
+            elif task == "unload":
+                self.server._addEndTask(self.uid)
+                HtmlPage.expire(pageid)
+                # HtmlPage.raiseException(pageid, RuntimeError("unload"))
+                self.server.log_message("UNLOAD %s", pageid)
+                self.reply('')
         else:
             self.do_PAGE(data)
 
@@ -541,11 +862,64 @@ class Handler(SimpleHTTPRequestHandler):
         else:
             # otherwise, pass on the request to the Client object. It will
             # execute a method with the same name if it exists.
-            reply = self.server._page(self.uid, qry.path, qry)
-            if isinstance(reply, list) or isinstance(reply, tuple):
-                self.reply(*reply)
+            if hasattr(self, "uid"):
+                # uid set so we're goog
+                self._page(self.uid, qry.path, qry)
+                return
             else:
-                self.reply(reply)
+                # if uid is not set, then cookies are disabled and user
+                # clicked on an uncontrolled link, so do our best
+                # to guess a context
+                self._page(None, qry.path, qry)
+                return
+
+        # ERROR!!!
+        return
+            # if isinstance(reply, list) or isinstance(reply, tuple):
+            #     self.reply(*reply)
+            # else:
+            #     self.reply(reply)
+
+    def _page(self, uid, path, query):
+        '''
+        Called by framework to return a queried page. When the browser requests a web page
+        (for example when a user clicks on a link), the path will get put in `path` and
+        any paramters passed through GET or POST will get passed in `query`. This will
+        look for a Client method with the same name as the page requested. If found, it will
+        execute it and return the results. If not, it will return "not found", status 404.
+        '''
+        app = self.server._getApp(uid)
+        if callable(path):
+            f = path
+        else:
+            fxn = path[1:].replace('/', '_')
+            if hasattr(app, fxn):
+                f = getattr(app, fxn)
+            else:
+                raise RuntimeError("Page not found: " + fxn)
+                # return "Not found", 404
+
+        app._handler = self
+        app._signal = threading.Event()
+        self.log_message("START PAGE %s %d", path, id(app._signal))
+        server_thread = threading.Thread(target=Handler.run_callable, 
+                args=(f, self.server, {"page": path, "query": query}))
+        server_thread.daemon = True
+        server_thread.start()
+        self.log_message("WAIT ON SIGNAL %s %d", path, id(app._signal))
+        app._signal.wait() # set when HTML is sent
+
+    @staticmethod
+    def run_callable(f, server, args):
+        params = signature(f).parameters
+        try:
+            if len(params) == 0:
+                f()
+            else:
+                f(args)
+        except Exception as ex:
+            traceback.print_exc()
+            server.log_error("Exception: %s" % str(ex))
 
     def log_message(self, format, *args):
         if self.server.verbose:
@@ -567,13 +941,20 @@ class JSstate:
         When python requests a statement to be evaluated, a
         unique query id is assigned. Then a Queue is created
         to wait for reasults. This maps ids to Queues.
+    _error
+        If tasks have errors, the last Exception object is
+        stored here. Value is None if there are no errors.
+    _server
+        The server tied to this state
     '''
 
-    def __init__(self):
+    def __init__(self, server):
         self._tasks = queue.Queue()
         self._fxn = {}
         self._queries = {}
         self._error = None
+        self._server = server
+        self._lock = threading.Lock()
 
 class JSchain:
     '''
@@ -592,16 +973,16 @@ class JSchain:
     There is a special name called `dom` which is shorthand for
     lookups. For example,
 
-        dom.button1.innerHTML
+        js.dom.button1.innerHTML
 
     Becomes
 
-        document.getElementById("button1").innerHTML
+        js.document.getElementById("button1").innerHTML
 
     Example
     --------------
     ```
-    state = JSstate()
+    state = JSstate(server)
     js = JSchain(state)
     js.document.getElementById("txt").value
     ```
@@ -680,7 +1061,7 @@ class JSchain:
             # otherwise, regular assignment
             self._add(attr)
             self._add("=" + json.dumps(value), dot=False)
-        return self
+        return self.evalAsync()
 
     def __call__(self, *args, **kwargs):
         '''
@@ -719,11 +1100,18 @@ class JSchain:
         '''
         for _ in range(10):
             if self.state._tasks.qsize() < 5:
-                self.log_message("ADD TASK %s", stmt)
                 self.state._tasks.put(stmt)
+                self.state._server.log_message("ADD TASK %s ON %d", stmt, id(self.state._tasks))
                 return
             time.sleep(0.1)
         self.state._error = TimeoutError("Timeout inserting task: " + stmt)
+
+    def evalAsync(self):
+        if self.keep:
+            stmt = self._statement()
+            self._addTask(stmt)
+            # mark it as evaluated
+            self.keep = False
 
     def __del__(self):
         '''
@@ -801,19 +1189,31 @@ class JSchain:
         '''
         if not self.keep:
             raise ValueError("Expression cannot be evaluated")
+
         stmt = self._statement()
+
+        if self.state._lock.locked():
+            self.state._server.log_error("App is active so you cannot manipulate JS for: %s" % stmt)
+            raise RuntimeError("App is active so you cannot manipulate JS for: %s" % stmt)
+
         q = queue.Queue()
         idx = id(q)
         self.state._queries[idx] = q
         data = json.dumps(stmt)
-        self._addTask("sendBrowser({}, {})".format(data, idx))
+        self._addTask("sendFromBrowserToServer({}, {})".format(data, idx))
         try:
             result = q.get(timeout=timeout)
+            del self.state._queries[idx]
         except queue.Empty:
-            raise TimeoutError("Timout waiting on: "+stmt)
+            self.state._server.log_message("TIMEOUT waiting on: %s", stmt)
+            raise TimeoutError("Timout waiting on: %s" % stmt)
         if result["error"] != "":
-            raise ValueError(result["error"])
-        return result["value"]
+            self.state._server.log_error("ERROR %s : %s", result["error"], stmt)
+            # raise RuntimeError(result["error"] + ": " + stmt)
+        if "value" in result:
+            return result["value"]
+        else:
+            return 0
 
     #
     # Magic methods. We create these methods for force the
@@ -899,7 +1299,7 @@ class JS:
     Example:
     --------------
     ```
-    state = JSstate()
+    state = JSstate(server)
     js = JS(state)
     js.document.getElementById("txt").value = 25
     ```
@@ -935,6 +1335,7 @@ class JS:
             e = self.state._error
             self.state._error = None
             raise e
+
         chain = JSchain(self.state)
         chain._add(attr)
         return chain
