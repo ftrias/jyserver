@@ -120,11 +120,13 @@ JSCRIPT = b"""
         var value
         var error = ""
         try {
+            // console.log(query, expression)
             value = eval(expression)
         }
         catch (e) {
             value = 0
-            error = e.message 
+            error = e.message + ": '" + expression + "'"
+            // console.log("ERROR", query, error)
         }
         var request = new XMLHttpRequest();
         request.open("POST", "/_process_srv0");
@@ -502,8 +504,7 @@ class Server(ThreadingTCPServer):
             # _mainRun will run main and terminate the server after main returns.
             if hasattr(a, "main"):
                 server_thread = threading.Thread(
-                    target=self._mainRun, args=(uid,))
-                server_thread.daemon = True
+                    target=self._mainRun, args=(uid,), daemon=True)
                 server_thread.start()
             return a
         raise ValueError(f"Invalid or empty seession id: {uid}")
@@ -548,7 +549,7 @@ class Server(ThreadingTCPServer):
         '''
         try:
             self.log_message("TASKS WAITING %d ON %d", self._getApp(uid)._state._tasks.qsize(), id(self._getApp(uid)._state._tasks))
-            return self._getApp(uid)._state._tasks.get(timeout=10)
+            return self._getApp(uid)._state._tasks.get(timeout=5)
         except queue.Empty:
             return None
 
@@ -645,13 +646,22 @@ class Server(ThreadingTCPServer):
         except Exception as ex:
             self.log_message("FATAL ERROR: %s", ex)
         finally:
-            self.shutdown()
+            self.stop()
+
+    def stop(self):
+        # self._BaseServer__shutdown_request = True
+        self._runmode = False
+        # self.shutdown()
 
     def _runServer(self):
         '''
         Begin running the server until terminated.
         '''
-        self.serve_forever()
+        self._runmode = True
+        while self._runmode:
+            self.handle_request()
+        # self.serve_forever()
+        self.log_message("SERVER TERMINATED")
 
     def start(self, wait=True, cookies=True):
         '''
@@ -670,10 +680,9 @@ class Server(ThreadingTCPServer):
         '''
         self.useCookies = cookies
         if wait or hasattr(self.appClass, "main"):
-            self.serve_forever()
+            self._runServer()
         else:
-            server_thread = threading.Thread(target=self._runServer)
-            server_thread.daemon = True
+            server_thread = threading.Thread(target=self._runServer, daemon=True)
             server_thread.start()
 
     def log_message(self, format, *args):
@@ -757,6 +766,7 @@ class Handler(SimpleHTTPRequestHandler):
         '''
         Called by parent to process GET requests. Forwards requests to do_PAGE.
         '''
+        if not self.server._runmode: return
         self.processCookies()
         qry = urlparse(self.path)
         req = dict(parse_qsl(qry.query))
@@ -785,6 +795,7 @@ class Handler(SimpleHTTPRequestHandler):
         Called by parent to process POST requests. Handles the built-in
         /state and /run requests and forwards all others to do_PAGE.
         '''
+        if not self.server._runmode: return
         self.processCookies()
         l = int(self.headers["Content-length"])
         data = self.rfile.read(l)
@@ -906,11 +917,11 @@ class Handler(SimpleHTTPRequestHandler):
         app._signal = threading.Event()
         self.log_message("START PAGE %s %d", path, id(app._signal))
         server_thread = threading.Thread(target=Handler.run_callable, 
-                args=(f, self.server, {"page": path, "query": query}))
-        server_thread.daemon = True
+                args=(f, self.server, {"page": path, "query": query}), daemon=True)
         server_thread.start()
         self.log_message("WAIT ON SIGNAL %s %d", path, id(app._signal))
         app._signal.wait() # set when HTML is sent
+        app._signal = None
 
     @staticmethod
     def run_callable(f, server, args):
@@ -1018,6 +1029,13 @@ class JSchain:
         self.chain.append(attr)
         return self
 
+    def _prepend(self, attr):
+        '''
+        Add item to the start of the chain. 
+        '''
+        self.chain.insert(0, attr)
+        return self
+
     def _last(self):
         '''
         Last item on the chain.
@@ -1046,13 +1064,6 @@ class JSchain:
         return self
 
     def __setattr__(self, attr, value):
-        return self.setdata(attr, value)
-
-    def setdata(self, attr, value, adot=True):
-        '''
-        Called during assigment, as in `self.js.x = 10` or during a call
-        assignement as in `self.js.onclick = func`, where func is a function.
-        '''
         value = JS._v(value)
         if attr == "chain" or attr == "state" or attr == "keep":
             # ignore our own attributes. If an attribute is added to "self" it
@@ -1060,6 +1071,15 @@ class JSchain:
             # using the __dict__ member.
             super(JSchain, self).__setattr__(attr, value)
             return value
+        # print("SET", attr, value)
+        self.setdata(attr, value)
+        self.execExpression()
+
+    def setdata(self, attr, value, adot=True):
+        '''
+        Called during assigment, as in `self.js.x = 10` or during a call
+        assignement as in `self.js.onclick = func`, where func is a function.
+        '''
         if callable(value):
             # is this a function call?
             idx = id(value)
@@ -1075,10 +1095,18 @@ class JSchain:
     def __setitem__(self, key, value):
         jkey = "['%s']" % str(key)
         self.setdata(jkey, value, adot=False)
+        self.execExpression()
         return value
 
     def __getitem__(self, key):
-        jkey = "['%s']" % str(key)
+        # all keys are strings in json, so format it
+        key = str(key)
+        c = self._dup()
+        c._prepend("'%s' in " % key)
+        haskey = c.eval()
+        if not haskey:
+            raise KeyError(key)
+        jkey = "['%s']" % key
         c = self.getdata(jkey, adot=False)
         return c.eval()
 
@@ -1165,11 +1193,31 @@ class JSchain:
         To force an evaluation, call the "eval()"
         method, as in "self.js.myvalue.eval()".
         '''
+        if not self.keep: return
+        # print("!!!DEL!!!")
+        try:
+            self.execExpression()
+        except Exception as ex:
+            self.state._error = ex
+            self.state._server.log_error("Uncatchable exception: %s", str(ex))
 
+    def execExpression(self):
         # Is this a temporary expression that cannot evaluated?
         if self.keep:
             stmt = self._statement()
-            self._addTask(stmt)
+            # print("EXEC", stmt)
+            if self.state._lock.locked():
+                # print("ASYNC", stmt)
+                # running within a query, so just run it async
+                self._addTask(stmt)
+            else:
+                # otherwise, wait for evaluation
+                # print("SYNC", stmt)
+                try:
+                    self.eval()
+                except Exception as ex:
+                    self.keep = False
+                    raise ex
             # mark it as evaluated
             self.keep = False
 
@@ -1207,9 +1255,11 @@ class JSchain:
             Time to wait in seconds before giving up if no response is received.
         '''
         if not self.keep:
-            raise ValueError("Expression cannot be evaluated")
+            return 0
+            # raise ValueError("Expression cannot be evaluated")
 
         stmt = self._statement()
+        # print("EVAL", stmt)
 
         if self.state._lock.locked():
             self.state._server.log_error("App is active so you cannot manipulate JS for: %s" % stmt)
@@ -1219,16 +1269,18 @@ class JSchain:
         idx = id(q)
         self.state._queries[idx] = q
         data = json.dumps(stmt)
-        self._addTask("sendFromBrowserToServer({}, {})".format(data, idx))
+        cmd = "sendFromBrowserToServer({}, {})".format(data, idx)
+        self._addTask(cmd)
         try:
+            self.state._server.log_message("WAITING ON RESULT QUEUE")
             result = q.get(timeout=timeout)
             del self.state._queries[idx]
         except queue.Empty:
-            self.state._server.log_message("TIMEOUT waiting on: %s", stmt)
+            # self.state._server.log_message("TIMEOUT waiting on: %s", stmt)
             raise TimeoutError("Timout waiting on: %s" % stmt)
         if result["error"] != "":
-            self.state._server.log_error("ERROR %s : %s", result["error"], stmt)
-            # raise RuntimeError(result["error"] + ": " + stmt)
+            # self.state._server.log_error("ERROR EVAL %s : %s", result["error"], stmt)
+            raise RuntimeError(result["error"] + ": " + stmt)
         if "value" in result:
             return result["value"]
         else:
