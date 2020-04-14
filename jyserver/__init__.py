@@ -100,15 +100,15 @@ JSCRIPT = b"""
         var request = new XMLHttpRequest();
         request.onreadystatechange = function() {
             if (request.readyState==4 && request.status==200){
+                setTimeout(evalBrowser, 1);
                 try {
                     // console.log(request.responseText)
                     eval(request.responseText)
-                    setTimeout(evalBrowser, 1);
                 }
                 catch(e) {
-                    console.log(e)
+                    console.log("ERROR", e.message)
                     setTimeout(function(){sendErrorToServer(request.responseText, e.message);}, 1);
-                    setTimeout(evalBrowser, 10);
+                    // setTimeout(evalBrowser, 10);
                 }
             }
         }
@@ -126,7 +126,7 @@ JSCRIPT = b"""
         catch (e) {
             value = 0
             error = e.message + ": '" + expression + "'"
-            // console.log("ERROR", query, error)
+            console.log("ERROR", query, error)
         }
         var request = new XMLHttpRequest();
         request.open("POST", "/_process_srv0");
@@ -151,7 +151,11 @@ JSCRIPT = b"""
                 var request = new XMLHttpRequest();
                 request.onreadystatechange = function() {
                     if (request.readyState==4 && request.status==200){
-                        console.log("Async results", property, request.responseText)
+                        result = JSON.parse(request.responseText)
+                        if ("error" in result) {
+                            console.log("ERROR async: ", property, request.responseText)
+                            throw result["error"]
+                        }
                     }
                 }
                 request.open("POST", "/_process_srv0");
@@ -591,6 +595,7 @@ class Server(ThreadingTCPServer):
                     result = f(*args)
                     ret = json.dumps({"value":JS._v(result)})
                 except Exception as ex:
+                    self.log_error("Exception passed to browser")
                     traceback.print_exc()
                     s = str(ex)
                     self.log_message("Exception %s", s)
@@ -843,7 +848,7 @@ class Handler(SimpleHTTPRequestHandler):
                 # here, the browser is requesting we execute a statement and
                 # return the results.
                 result = self.server._run(self.uid, req['function'], req['args'], block=False)
-                self.reply(json.dumps(JS._v(result)))
+                self.reply(result)
             elif task == "next":
                 # the Browser is requesting we evaluate an expression and
                 # return the results.
@@ -1200,6 +1205,7 @@ class JSchain:
         except Exception as ex:
             self.state._error = ex
             self.state._server.log_error("Uncatchable exception: %s", str(ex))
+            raise ex
 
     def execExpression(self):
         # Is this a temporary expression that cannot evaluated?
@@ -1257,6 +1263,8 @@ class JSchain:
         if not self.keep:
             return 0
             # raise ValueError("Expression cannot be evaluated")
+        else:
+            self.keep = False
 
         stmt = self._statement()
         # print("EVAL", stmt)

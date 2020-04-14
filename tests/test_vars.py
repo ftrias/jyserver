@@ -11,9 +11,11 @@ class App(Client):
 <script>
 function multNum(a,b){return a*b}
 function fset(a){document.getElementById("time").innerHTML = a}
+function fset2(){document.getElementById("time").innerHTML = "T2"}
 function fsetApp(a,b){document.getElementById("time").innerHTML = app.addNumbers(a,b)}
 function faddApp(a,b){return app.addNumbers(a,b)}
 function fsetTestApp(){return server.setTestText()}
+function fsetThrow(){return server.throwError()}
 function add2(a,b){return a+b}
 </script>
 <p id="time">NOW</p>
@@ -23,6 +25,9 @@ function add2(a,b){return a+b}
 
     def setTestText(self):
         self.js.dom.time.innerHTML = "ABC123"
+
+    def throwError(self):
+        raise ValueError("Throw error message")
 
 class MyTest(unittest.TestCase):
     @classmethod
@@ -40,10 +45,14 @@ class MyTest(unittest.TestCase):
         self.assertEqual(v, 30)
         self.js.fset("TEST123")
         self.assertEqual(self.js.dom.time.innerHTML, "TEST123")
+        self.js.fset2()
+        self.assertEqual(self.js.dom.time.innerHTML, "T2")
         self.js.fsetTestApp()
         self.assertEqual(self.js.dom.time.innerHTML, "ABC123")
         self.js.fsetApp(12, 20)
         self.assertEqual(self.js.dom.time.innerHTML, "32")
+        # with self.assertRaises(ValueError):
+        #     self.js.fsetThrow()
 
     def test_float(self):
         self.js.valfloat = 1.5
