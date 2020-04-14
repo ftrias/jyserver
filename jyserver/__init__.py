@@ -643,7 +643,7 @@ class Server(ThreadingTCPServer):
         try:
             self._getApp(uid, True).main()
         except Exception as ex:
-            self.log_message("FATAL ERROR: ", ex)
+            self.log_message("FATAL ERROR: %s", ex)
         finally:
             self.shutdown()
 
@@ -892,11 +892,14 @@ class Handler(SimpleHTTPRequestHandler):
         if callable(path):
             f = path
         else:
-            fxn = path[1:].replace('/', '_')
+            fxn = path[1:].replace('/', '_').replace('.', '_')
             if hasattr(app, fxn):
                 f = getattr(app, fxn)
+            elif path == "/favicon.ico":
+                self.reply("Not found %s" % path, 404)
+                return
             else:
-                raise RuntimeError("Page not found: " + fxn)
+                raise RuntimeWarning("Page not found: " + path)
                 # return "Not found", 404
 
         app._handler = self
@@ -1029,6 +1032,9 @@ class JSchain:
         # __iter__ calls should be ignored
         if attr == "__iter__":
             return self
+        return self.getdata(attr)
+
+    def getdata(self, attr, adot=True):
         if self._last() == 'dom':
             # substitute the `dom` shortcut
             self.chain[-1] = 'document'
@@ -1036,10 +1042,13 @@ class JSchain:
             self._add('("{}")'.format(attr), dot=False)
         else:
             # add the item to the chain
-            self._add(attr)
+            self._add(attr, dot=adot)
         return self
 
     def __setattr__(self, attr, value):
+        return self.setdata(attr, value)
+
+    def setdata(self, attr, value, adot=True):
         '''
         Called during assigment, as in `self.js.x = 10` or during a call
         assignement as in `self.js.onclick = func`, where func is a function.
@@ -1055,13 +1064,23 @@ class JSchain:
             # is this a function call?
             idx = id(value)
             self.state._fxn[idx] = value
-            self._add(attr)
+            self._add(attr, dot=adot)
             self._add(f"=function(){{server._callfxn({idx});}}", dot=False)
         else:
             # otherwise, regular assignment
-            self._add(attr)
+            self._add(attr, dot=adot)
             self._add("=" + json.dumps(value), dot=False)
-        return self.evalAsync()
+        return value
+
+    def __setitem__(self, key, value):
+        jkey = "['%s']" % str(key)
+        self.setdata(jkey, value, adot=False)
+        return value
+
+    def __getitem__(self, key):
+        jkey = "['%s']" % str(key)
+        c = self.getdata(jkey, adot=False)
+        return c.eval()
 
     def __call__(self, *args, **kwargs):
         '''
@@ -1284,11 +1303,16 @@ class JSchain:
     def __sizeof__(self): return self.eval().__sizeof__()
     def __unicode__(self): return self.eval().__unicode__()
 
-    def __getitem__(self, key): return self.eval().__getitem__(key)
     def __iter__(self): return self.eval().__iter__()
     def __reversed__(self): return self.eval().__reversed__()
-    def __contains__(self, item): return self.eval().__contains__(item)
-    def __missing__(self, key): return self.eval().__missing__(key)
+    def __contains__(self, item): 
+        d = self.eval()
+        if isinstance(d, dict):
+            # json makes all keys strings
+            return d.__contains__(str(item))
+        else:
+            return d.__contains__(item)
+    # def __missing__(self, key): return self.eval().__missing__(key)
 
 
 class JS:

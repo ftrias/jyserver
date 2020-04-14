@@ -29,9 +29,31 @@ class App(Client):
         self.js.dom.b2.onclick = self.stop
 
     def main(self):
-        for _ in range(100):
+        self.js.dict = {5:-99,9:-999}
+        self.js.arr = [5,'10',15]
+        self.js.counter = 0
+        print("dict", self.js.dict)
+        for i in range(100):
+            if i in self.js.dict:
+                print(i,"contains",self.js.dict[i])
+            else:
+                self.js.dict[i] = i*100 + 9
+                print(i,"is",self.js.dict[i])
+
+            if i in self.js.arr:
+                print(i,"already in array")
+            else:
+                self.js.arr += [i]
+                print("array is now", self.js.arr)
+
             if self.running:
-                self.js.dom.time.innerHTML = "{:.1f}".format(time.time() - self.start0)
+                self.js.counter += 1
+                self.js.dom.time.innerHTML = "{:.1f}".format(self.js.counter)
+                if self.js.counter < 10:
+                    print(self.js.counter * 10)
+                else:
+                    print(100 + self.js.counter)
+
             time.sleep(1)
  
 httpd = Server(App, verbose=False)
