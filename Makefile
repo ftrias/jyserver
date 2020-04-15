@@ -24,7 +24,7 @@ docs:
 html: docs
 	rm -rf docs/*
 	pdoc --html -o docs jyserver/
-	mv docs/jyserver/index.html docs
+	mv docs/jyserver/* docs
 	rmdir docs/jyserver
 	
 .PHONY: init test
