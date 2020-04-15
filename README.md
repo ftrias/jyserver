@@ -89,10 +89,46 @@ def index_page(name=None):
     return App.render(render_template('flask-simple.html')
 ```
 
+## Django example
+
+```python
+from django.shortcuts import render
+import jyserver.Django as jsd
+import time
+
+@jsd.use
+class App():
+    def reset(self):
+        self.start0 = time.time()
+        self.js.dom.time.innerHTML = "{:.1f}".format(0)
+
+    @jsd.task
+    def main(self):
+        self.start0 = time.time()
+        while True:
+            t = "{:.1f}".format(time.time() - self.start0)
+            self.js.dom.time.innerHTML = t
+            time.sleep(0.1)
+
+def hello_world(request):
+    App.main()
+    return App.render(render(request, 'hello_world.html', {}))
+```
+
+In your `urls.py` add this path:
+
+```python
+from jyserver.Django import process
+...
+    url(r'^_process_srv0$', process, name='process'),
+```
+
+## Internals
+
 How does this work? In the standalone example, the process is below. 
 Flask is identical except for the httpd server.
 
-1. After calling `httpd.start()`, the server will listen for new http requests.
+1. The server will listen for new http requests.
 
 2. When "/" is requested, jyserver will insert special Javascript code into the
    HTML that enables communication before sending it to the browser. This code
@@ -100,7 +136,8 @@ Flask is identical except for the httpd server.
 
 3. This injected code will cause the browser to send an asynchronous http
    request to the server asking for new commands for the browser to execute.
-   Then it waits for a response in the background.
+   Then it waits for a response in the background. Requests are sent via
+   POST on /_process_srv0, which the server intercepts.
 
 4. When the user clicks on the button `reset`, the `server` Proxy object is
    called. It will extract the method name--in this case `reset`--and then make
@@ -159,11 +196,6 @@ Functions are treated as first-class objects and can be assigned.
 
 ```python
 class App(Client):
-    def __init__(self):
-        self.html = """
-<p id="time">WHEN</p>
-<button id="b2" onclick="server.stop()">Pause</button>
-"""
     def stop(self):
         self.running = False
         self.js.dom.b2.onclick = self.restart

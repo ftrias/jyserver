@@ -102,11 +102,11 @@ JSCRIPT = b"""
             if (request.readyState==4 && request.status==200){
                 setTimeout(evalBrowser, 1);
                 try {
-                    //console.log(request.responseText) // DEBUG
+                    console.log(request.responseText) // DEBUG
                     eval(request.responseText)
                 }
                 catch(e) {
-                    //console.log("ERROR", e.message) // DEBUG
+                    console.log("ERROR", e.message) // DEBUG
                     setTimeout(function(){sendErrorToServer(request.responseText, e.message);}, 1);
                     setTimeout(evalBrowser, 10);
                 }
@@ -115,7 +115,7 @@ JSCRIPT = b"""
         request.open("POST", "/_process_srv0");
         request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
         request.send(JSON.stringify({"session": PAGEID, "task":"next"}));
-        //console.log("Query next commands") // DEBUG
+        console.log("Query next commands") // DEBUG
     }
     function sendFromBrowserToServer(expression, query) {
         var value
@@ -280,8 +280,8 @@ class Client:
             def func(self, 15, 65)
     '''
     def __init__(self):
-        self.js     : JSchain = None
-        self._state : ClientContext = None
+        self.js = None
+        self._state = None
 
     def h(self, html=None, file=None):
         '''
@@ -301,17 +301,24 @@ class ClientContext:
         self.queries = {}
         self.lock = threading.Lock()
         self.fxn = {}
-        self.verbose : bool = verbose
+        self.verbose = verbose
         self.tasks = queue.Queue()
         self.uid = uid
-        self._error : Exception = None
-        self._signal : threading.Event = None
+        self._error = None
+        self._signal = None
         self.obj.js = JSroot(self)
 
     def render(self, html):
+        # for Django support
         page = HtmlPage(html=html)
         html = page.html(self.uid)
         return html
+
+    def render_django(self, inp):
+        # for Django support
+        page = HtmlPage(html=inp.content)
+        inp.content = page.html(self.uid)
+        return inp
 
     def htmlsend(self, html=None, file=None):
         page = HtmlPage(html=html, file=file)
@@ -378,7 +385,7 @@ class ClientContext:
             context.mainRun()
             return context
 
-        raise ValueError(f"Invalid or empty seession id: {uid}")
+        raise ValueError("Invalid or empty seession id: %s" % uid)
 
     def processCommand(self, req):
         pageid = req["session"]
@@ -537,7 +544,7 @@ class ClientContext:
             if hasattr(self.obj, expr):
                 value = getattr(self.obj, expr)
                 if callable(value):
-                    value = f"(function(...args) {{ return handleApp('{expr}', args) }})"  
+                    value = "(function(...args) { return handleApp('%s', args) })" % expr 
                     return json.dumps({"type":"expression", "expression":value})       
                 else:
                     return json.dumps({"type":"value", "value":value})
@@ -1108,7 +1115,7 @@ class JSchain:
             idx = id(value)
             self.state.fxn[idx] = value
             self._add(attr, dot=adot)
-            self._add(f"=function(){{server._callfxn({idx});}}", dot=False)
+            self._add("=function(){{server._callfxn(%s);}}" % idx, dot=False)
         else:
             # otherwise, regular assignment
             self._add(attr, dot=adot)
