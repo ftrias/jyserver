@@ -1,0 +1,1142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
+<meta name="generator" content="pdoc 0.8.0" />
+<title>jyserver.Server API documentation</title>
+<meta name="description" content="" />
+<link href='https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.0/normalize.min.css' rel='stylesheet'>
+<link href='https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/8.0.0/sanitize.min.css' rel='stylesheet'>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css" rel="stylesheet">
+<style>.flex{display:flex !important}body{line-height:1.5em}#content{padding:20px}#sidebar{padding:30px;overflow:hidden}#sidebar > *:last-child{margin-bottom:2cm}.http-server-breadcrumbs{font-size:130%;margin:0 0 15px 0}#footer{font-size:.75em;padding:5px 30px;border-top:1px solid #ddd;text-align:right}#footer p{margin:0 0 0 1em;display:inline-block}#footer p:last-child{margin-right:30px}h1,h2,h3,h4,h5{font-weight:300}h1{font-size:2.5em;line-height:1.1em}h2{font-size:1.75em;margin:1em 0 .50em 0}h3{font-size:1.4em;margin:25px 0 10px 0}h4{margin:0;font-size:105%}a{color:#058;text-decoration:none;transition:color .3s ease-in-out}a:hover{color:#e82}.title code{font-weight:bold}h2[id^="header-"]{margin-top:2em}.ident{color:#900}pre code{background:#f8f8f8;font-size:.8em;line-height:1.4em}code{background:#f2f2f1;padding:1px 4px;overflow-wrap:break-word}h1 code{background:transparent}pre{background:#f8f8f8;border:0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;margin:1em 0;padding:1ex}#http-server-module-list{display:flex;flex-flow:column}#http-server-module-list div{display:flex}#http-server-module-list dt{min-width:10%}#http-server-module-list p{margin-top:0}.toc ul,#index{list-style-type:none;margin:0;padding:0}#index code{background:transparent}#index h3{border-bottom:1px solid #ddd}#index ul{padding:0}#index h4{margin-top:.6em;font-weight:bold}@media (min-width:200ex){#index .two-column{column-count:2}}@media (min-width:300ex){#index .two-column{column-count:3}}dl{margin-bottom:2em}dl dl:last-child{margin-bottom:4em}dd{margin:0 0 1em 3em}#header-classes + dl > dd{margin-bottom:3em}dd dd{margin-left:2em}dd p{margin:10px 0}.name{background:#eee;font-weight:bold;font-size:.85em;padding:5px 10px;display:inline-block;min-width:40%}.name:hover{background:#e0e0e0}.name > span:first-child{white-space:nowrap}.name.class > span:nth-child(2){margin-left:.4em}.inherited{color:#999;border-left:5px solid #eee;padding-left:1em}.inheritance em{font-style:normal;font-weight:bold}.desc h2{font-weight:400;font-size:1.25em}.desc h3{font-size:1em}.desc dt code{background:inherit}.source summary,.git-link-div{color:#666;text-align:right;font-weight:400;font-size:.8em;text-transform:uppercase}.source summary > *{white-space:nowrap;cursor:pointer}.git-link{color:inherit;margin-left:1em}.source pre{max-height:500px;overflow:auto;margin:0}.source pre code{font-size:12px;overflow:visible}.hlist{list-style:none}.hlist li{display:inline}.hlist li:after{content:',\2002'}.hlist li:last-child:after{content:none}.hlist .hlist{display:inline;padding-left:1em}img{max-width:100%}.admonition{padding:.1em .5em;margin-bottom:1em}.admonition-title{font-weight:bold}.admonition.note,.admonition.info,.admonition.important{background:#aef}.admonition.todo,.admonition.versionadded,.admonition.tip,.admonition.hint{background:#dfd}.admonition.warning,.admonition.versionchanged,.admonition.deprecated{background:#fd4}.admonition.error,.admonition.danger,.admonition.caution{background:lightpink}</style>
+<style media="screen and (min-width: 700px)">@media screen and (min-width:700px){#sidebar{width:30%;height:100vh;overflow:auto;position:sticky;top:0}#content{width:70%;max-width:100ch;padding:3em 4em;border-left:1px solid #ddd}pre code{font-size:1em}.item .name{font-size:1em}main{display:flex;flex-direction:row-reverse;justify-content:flex-end}.toc ul ul,#index ul{padding-left:1.5em}.toc > ul > li{margin-top:.5em}}</style>
+<style media="print">@media print{#sidebar h1{page-break-before:always}.source{display:none}}@media print{*{background:transparent !important;color:#000 !important;box-shadow:none !important;text-shadow:none !important}a[href]:after{content:" (" attr(href) ")";font-size:90%}a[href][title]:after{content:none}abbr[title]:after{content:" (" attr(title) ")"}.ir a:after,a[href^="javascript:"]:after,a[href^="#"]:after{content:""}pre,blockquote{border:1px solid #999;page-break-inside:avoid}thead{display:table-header-group}tr,img{page-break-inside:avoid}img{max-width:100% !important}@page{margin:0.5cm}p,h2,h3{orphans:3;widows:3}h1,h2,h3,h4,h5,h6{page-break-after:avoid}}</style>
+</head>
+<body>
+<main>
+<article id="content">
+<header>
+<h1 class="title">Module <code>jyserver.Server</code></h1>
+</header>
+<section id="section-intro">
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">from socketserver import ThreadingTCPServer
+from http.server import SimpleHTTPRequestHandler
+from http.cookies import SimpleCookie
+from urllib.parse import urlparse, parse_qsl, unquote
+
+from jyserver import ClientContext
+
+import json
+import threading
+import queue
+import os
+import copy
+import re
+import time
+import uuid
+
+
+class Client:
+    &#39;&#39;&#39;
+    Client class contains all methods and code that is executed on the server
+    and browser. Users of this library should inherit this class and implement
+    methods. There are three types of methods:
+
+    Attributes
+    ------------
+    home
+        Optional filename to send when &#34;/&#34; is requested
+    html
+        Optional HTML to send when &#34;/&#34; is requested. If neither
+        `home` nor `html` are set, then it will send &#34;index.html&#34;
+    js
+        JS object for constructing and executing Javascript.
+
+    Methods
+    -----------
+
+    h(file, html)
+        Return appropriate HTML for the active page. Can only
+        be called once per page. Must be called if implementing
+        custom pages.
+    
+    Optional Methods
+    ------------
+    * main(self)
+
+        If this is implemented, then the server will begin execution of this
+        function immediately. The server will terminate when this function
+        terminates.
+
+    * index(self)
+
+        If `index` is defined, it will execute this function. The function
+        is responsible for returning the HTML with the h() method.
+
+    * page(self)
+
+        When the browser clicks on a link (or issues a GET) a method with the
+        name of the page is executed. For example, clicking on link &#34;http:/pg1&#34;
+        will cause a method named &#34;pg1&#34; to be executed.
+
+    * func(self)
+
+        When the browser executes a &#34;server&#34; command, the server runs a method
+        with the same name. For example, if the browser runs the Javascript
+        code:
+
+            server.addnum(15, 65)
+
+        then this method will be called:
+
+            def func(self, 15, 65)
+    &#39;&#39;&#39;
+    def __init__(self):
+        self.js = None
+        self._state = None
+
+    def h(self, html=None, file=None):
+        &#39;&#39;&#39;
+        Convert text to html and wrap with script code. Return the HTML as a
+        byte string. Must be called if implementing a custom page
+        such as `index`.
+        &#39;&#39;&#39;
+        return self._state.htmlsend(html, file)
+
+class Server(ThreadingTCPServer):
+    &#39;&#39;&#39;
+    Server implements the web server, waits for connections and processes
+    commands. Each browser request is handled in its own thread and so requests
+    are asynchronous. The server starts listening when the &#34;start()&#34; method is
+    called.
+
+    Methods
+    ------------
+    start(wait, cookies)
+    &#39;&#39;&#39;
+
+    PORT = 8080
+    allow_reuse_address = True
+
+    def __init__(self, appClass, port=PORT, ip=None, verbose=False):
+        &#39;&#39;&#39;
+        Parameters
+        -------------
+        appClass
+            Class that inherits Client. Note that this is the
+            class name and not an instance.
+        port
+            Port to listen to (default is PORT)
+        ip
+            IP address to bind (default is all)
+        &#39;&#39;&#39;
+        self.verbose = verbose
+        # Instantiate objects of this class; must inherit from Client
+        self.appClass = appClass
+        self.contextMap = {}
+        # The port number
+        self.port = port
+        if ip is None:
+            ip = &#39;127.0.0.1&#39;
+        # Create the server object. Must call start() to begin listening.
+        super(Server, self).__init__((ip, port), Handler)
+
+    # def getContext(self):
+    #     return self._getContextForPage(&#39;SINGLE&#39;)
+
+    def js(self):
+        &#39;&#39;&#39;
+        If you are implementing a single application without a &#34;main&#34;
+        function, you can call this to retrieve the JS object and set
+        up for single instance execution.
+        &#39;&#39;&#39;
+        return self._getContextForPage(&#39;SINGLE&#39;, True).getJS()
+
+    def _getContextForPage(self, uid, create = False):
+        c = ClientContext._getContextForPage(uid, self.appClass, create=create, verbose=self.verbose)
+        return c
+        
+    def stop(self):
+        # self._BaseServer__shutdown_request = True
+        self._runmode = False
+        # self.shutdown()
+
+    def _runServer(self):
+        &#39;&#39;&#39;
+        Begin running the server until terminated.
+        &#39;&#39;&#39;
+        self._runmode = True
+        while self._runmode:
+            self.handle_request()
+        # self.serve_forever()
+        self.log_message(&#34;SERVER TERMINATED&#34;)
+
+    def start(self, wait=True, cookies=True):
+        &#39;&#39;&#39;
+        Start listening to the port and processing requests.
+
+        Parameters
+        ------------
+        wait
+            Start listening and wait for server to terminate. If this
+            is false, start server on new thread and continue execution.
+        cookies
+            If True, try to use cookies to keep track of sessions. This
+            enables the browser to open multiple windows that all share
+            the same Client object. If False, then cookies are disabled
+            and each tab will be it&#39;s own session.
+        &#39;&#39;&#39;
+        self.useCookies = cookies
+        if wait or hasattr(self.appClass, &#34;main&#34;):
+            self._runServer()
+        else:
+            server_thread = threading.Thread(target=self._runServer, daemon=True)
+            server_thread.start()
+
+    def log_message(self, format, *args):
+        if self.verbose:
+            print(format % args)
+    def log_error(self, format, *args):
+        print(format % args)
+
+class Handler(SimpleHTTPRequestHandler):
+    &#39;&#39;&#39;
+    Handler is created for each request by the Server. This class
+    handles the page requests and delegates tasks.
+    &#39;&#39;&#39;
+
+    def getContext(self):
+        return self.server._getContextForPage(self.uid)
+
+    def reply(self, data, num=200):
+        &#39;&#39;&#39;
+        Reply to the client with the given status code. If data is given as a string
+        it will be encoded at utf8. Cookies are sent if they are used.
+        &#39;&#39;&#39;
+        self.send_response(num)
+        if self.server.useCookies:
+            self.send_header(
+                &#34;Set-Cookie&#34;, self.cookies.output(header=&#39;&#39;, sep=&#39;&#39;))
+        self.end_headers()
+
+        if data is None:
+            return
+
+        if isinstance(data, str):
+            data = data.encode(&#34;utf8&#34;)
+
+        try:
+            self.wfile.write(data)
+            self.log_message(&#34;REPLY DONE&#34;)
+        except Exception as ex:
+            traceback.print_exc()
+            self.server.log_error(&#34;Error sending: %s&#34;, str(ex))
+
+    def replyFile(self, path, num=200):
+        &#39;&#39;&#39;
+        Reply to client with given file.
+        &#39;&#39;&#39;
+        with open(path, &#34;rb&#34;) as f:
+            block = f.read()
+            result = HtmlPage(block).html(self.uid)
+            self.reply(result)
+
+    def processCookies(self):
+        &#39;&#39;&#39;
+        Read in cookies and extract the session id.
+        &#39;&#39;&#39;
+        if self.server.useCookies:
+            self.cookies = SimpleCookie(self.headers.get(&#39;Cookie&#39;))
+            if &#34;UID&#34; in self.cookies:
+                self.uid = self.cookies[&#34;UID&#34;]
+            else:
+                self.uid = None
+
+    def do_GET(self):
+        &#39;&#39;&#39;
+        Called by parent to process GET requests. Forwards requests to do_PAGE.
+        &#39;&#39;&#39;
+        if not self.server._runmode: return
+        self.processCookies()
+        qry = urlparse(self.path)
+        req = dict(parse_qsl(qry.query))
+        self.server.log_message(&#34;GET %s %s&#34;, qry, req)
+        if &#34;session&#34; in req:
+            pageid = req[&#34;session&#34;]
+            self.uid = HtmlPage.pageMap[pageid]
+        else:
+            self.uid = None
+            # self.setNewUID()
+
+        if qry.path == &#34;/&#34;:
+            # result = self.server._getHome(self.uid)
+            c = self.getContext()
+            result = c.showHome()
+            if callable(result):
+                self.log_message(&#34;HOME CALL %s&#34;, result)
+                c.showPage(self, result, qry)
+            else:
+                self.log_message(&#34;HOME SEND %s&#34;, result)
+                self.reply(result)
+        elif qry.path == &#34;/appscript.js&#34;:
+            self.reply(JSCRIPT)
+        else:
+            self.do_PAGE(qry)
+
+    def do_POST(self):
+        &#39;&#39;&#39;
+        Called by parent to process POST requests. Handles the built-in
+        /state and /run requests and forwards all others to do_PAGE.
+        &#39;&#39;&#39;
+        if not self.server._runmode: return
+        self.processCookies()
+        l = int(self.headers[&#34;Content-length&#34;])
+        data = self.rfile.read(l)
+        self.log_message(&#34;HTTP POST %s&#34;, data)
+        if self.path == &#34;/_process_srv0&#34;:
+            self.log_message(&#34;PROCESS %s&#34;, data)
+            req = json.loads(data)  
+            c = self.getContext()
+            results = c.processCommand(req)
+            self.reply(results)
+        else:
+            self.do_PAGE(data)
+
+    def do_PAGE(self, qry):
+        &#39;&#39;&#39;
+        Process page requests except /state and /run.
+        &#39;&#39;&#39;
+        self.log_message(&#34;PAGE %s&#34;, qry)
+        if os.path.exists(qry.path[1:]):
+            # try to send a file with the given name if it exists.
+            self.replyFile(qry.path[1:])
+        else:
+            # otherwise, pass on the request to the Client object. It will
+            # execute a method with the same name if it exists.
+            c = self.getContext()
+            c.showPage(self, qry.path, qry)
+
+    def log_message(self, format, *args):
+        if self.server.verbose:
+            print(format % args)</code></pre>
+</details>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+<h2 class="section-title" id="header-classes">Classes</h2>
+<dl>
+<dt id="jyserver.Server.Client"><code class="flex name class">
+<span>class <span class="ident">Client</span></span>
+</code></dt>
+<dd>
+<div class="desc"><p>Client class contains all methods and code that is executed on the server
+and browser. Users of this library should inherit this class and implement
+methods. There are three types of methods:</p>
+<h2 id="attributes">Attributes</h2>
+<dl>
+<dt><strong><code>home</code></strong></dt>
+<dd>Optional filename to send when "/" is requested</dd>
+<dt><strong><code>html</code></strong></dt>
+<dd>Optional HTML to send when "/" is requested. If neither
+<code>home</code> nor <code>html</code> are set, then it will send "index.html"</dd>
+<dt><strong><code>js</code></strong></dt>
+<dd>JS object for constructing and executing Javascript.</dd>
+</dl>
+<h2 id="methods">Methods</h2>
+<p>h(file, html)
+Return appropriate HTML for the active page. Can only
+be called once per page. Must be called if implementing
+custom pages.</p>
+<h2 id="optional-methods">Optional Methods</h2>
+<ul>
+<li>
+<p>main(self)</p>
+<p>If this is implemented, then the server will begin execution of this
+function immediately. The server will terminate when this function
+terminates.</p>
+</li>
+<li>
+<p>index(self)</p>
+<p>If <code>index</code> is defined, it will execute this function. The function
+is responsible for returning the HTML with the h() method.</p>
+</li>
+<li>
+<p>page(self)</p>
+<p>When the browser clicks on a link (or issues a GET) a method with the
+name of the page is executed. For example, clicking on link "http:/pg1"
+will cause a method named "pg1" to be executed.</p>
+</li>
+<li>
+<p>func(self)</p>
+<p>When the browser executes a "server" command, the server runs a method
+with the same name. For example, if the browser runs the Javascript
+code:</p>
+<pre><code>server.addnum(15, 65)
+</code></pre>
+<p>then this method will be called:</p>
+<pre><code>def func(self, 15, 65)
+</code></pre>
+</li>
+</ul></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class Client:
+    &#39;&#39;&#39;
+    Client class contains all methods and code that is executed on the server
+    and browser. Users of this library should inherit this class and implement
+    methods. There are three types of methods:
+
+    Attributes
+    ------------
+    home
+        Optional filename to send when &#34;/&#34; is requested
+    html
+        Optional HTML to send when &#34;/&#34; is requested. If neither
+        `home` nor `html` are set, then it will send &#34;index.html&#34;
+    js
+        JS object for constructing and executing Javascript.
+
+    Methods
+    -----------
+
+    h(file, html)
+        Return appropriate HTML for the active page. Can only
+        be called once per page. Must be called if implementing
+        custom pages.
+    
+    Optional Methods
+    ------------
+    * main(self)
+
+        If this is implemented, then the server will begin execution of this
+        function immediately. The server will terminate when this function
+        terminates.
+
+    * index(self)
+
+        If `index` is defined, it will execute this function. The function
+        is responsible for returning the HTML with the h() method.
+
+    * page(self)
+
+        When the browser clicks on a link (or issues a GET) a method with the
+        name of the page is executed. For example, clicking on link &#34;http:/pg1&#34;
+        will cause a method named &#34;pg1&#34; to be executed.
+
+    * func(self)
+
+        When the browser executes a &#34;server&#34; command, the server runs a method
+        with the same name. For example, if the browser runs the Javascript
+        code:
+
+            server.addnum(15, 65)
+
+        then this method will be called:
+
+            def func(self, 15, 65)
+    &#39;&#39;&#39;
+    def __init__(self):
+        self.js = None
+        self._state = None
+
+    def h(self, html=None, file=None):
+        &#39;&#39;&#39;
+        Convert text to html and wrap with script code. Return the HTML as a
+        byte string. Must be called if implementing a custom page
+        such as `index`.
+        &#39;&#39;&#39;
+        return self._state.htmlsend(html, file)</code></pre>
+</details>
+<h3>Methods</h3>
+<dl>
+<dt id="jyserver.Server.Client.h"><code class="name flex">
+<span>def <span class="ident">h</span></span>(<span>self, html=None, file=None)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Convert text to html and wrap with script code. Return the HTML as a
+byte string. Must be called if implementing a custom page
+such as <code>index</code>.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def h(self, html=None, file=None):
+    &#39;&#39;&#39;
+    Convert text to html and wrap with script code. Return the HTML as a
+    byte string. Must be called if implementing a custom page
+    such as `index`.
+    &#39;&#39;&#39;
+    return self._state.htmlsend(html, file)</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+<dt id="jyserver.Server.Handler"><code class="flex name class">
+<span>class <span class="ident">Handler</span></span>
+<span>(</span><span>*args, directory=None, **kwargs)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Handler is created for each request by the Server. This class
+handles the page requests and delegates tasks.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class Handler(SimpleHTTPRequestHandler):
+    &#39;&#39;&#39;
+    Handler is created for each request by the Server. This class
+    handles the page requests and delegates tasks.
+    &#39;&#39;&#39;
+
+    def getContext(self):
+        return self.server._getContextForPage(self.uid)
+
+    def reply(self, data, num=200):
+        &#39;&#39;&#39;
+        Reply to the client with the given status code. If data is given as a string
+        it will be encoded at utf8. Cookies are sent if they are used.
+        &#39;&#39;&#39;
+        self.send_response(num)
+        if self.server.useCookies:
+            self.send_header(
+                &#34;Set-Cookie&#34;, self.cookies.output(header=&#39;&#39;, sep=&#39;&#39;))
+        self.end_headers()
+
+        if data is None:
+            return
+
+        if isinstance(data, str):
+            data = data.encode(&#34;utf8&#34;)
+
+        try:
+            self.wfile.write(data)
+            self.log_message(&#34;REPLY DONE&#34;)
+        except Exception as ex:
+            traceback.print_exc()
+            self.server.log_error(&#34;Error sending: %s&#34;, str(ex))
+
+    def replyFile(self, path, num=200):
+        &#39;&#39;&#39;
+        Reply to client with given file.
+        &#39;&#39;&#39;
+        with open(path, &#34;rb&#34;) as f:
+            block = f.read()
+            result = HtmlPage(block).html(self.uid)
+            self.reply(result)
+
+    def processCookies(self):
+        &#39;&#39;&#39;
+        Read in cookies and extract the session id.
+        &#39;&#39;&#39;
+        if self.server.useCookies:
+            self.cookies = SimpleCookie(self.headers.get(&#39;Cookie&#39;))
+            if &#34;UID&#34; in self.cookies:
+                self.uid = self.cookies[&#34;UID&#34;]
+            else:
+                self.uid = None
+
+    def do_GET(self):
+        &#39;&#39;&#39;
+        Called by parent to process GET requests. Forwards requests to do_PAGE.
+        &#39;&#39;&#39;
+        if not self.server._runmode: return
+        self.processCookies()
+        qry = urlparse(self.path)
+        req = dict(parse_qsl(qry.query))
+        self.server.log_message(&#34;GET %s %s&#34;, qry, req)
+        if &#34;session&#34; in req:
+            pageid = req[&#34;session&#34;]
+            self.uid = HtmlPage.pageMap[pageid]
+        else:
+            self.uid = None
+            # self.setNewUID()
+
+        if qry.path == &#34;/&#34;:
+            # result = self.server._getHome(self.uid)
+            c = self.getContext()
+            result = c.showHome()
+            if callable(result):
+                self.log_message(&#34;HOME CALL %s&#34;, result)
+                c.showPage(self, result, qry)
+            else:
+                self.log_message(&#34;HOME SEND %s&#34;, result)
+                self.reply(result)
+        elif qry.path == &#34;/appscript.js&#34;:
+            self.reply(JSCRIPT)
+        else:
+            self.do_PAGE(qry)
+
+    def do_POST(self):
+        &#39;&#39;&#39;
+        Called by parent to process POST requests. Handles the built-in
+        /state and /run requests and forwards all others to do_PAGE.
+        &#39;&#39;&#39;
+        if not self.server._runmode: return
+        self.processCookies()
+        l = int(self.headers[&#34;Content-length&#34;])
+        data = self.rfile.read(l)
+        self.log_message(&#34;HTTP POST %s&#34;, data)
+        if self.path == &#34;/_process_srv0&#34;:
+            self.log_message(&#34;PROCESS %s&#34;, data)
+            req = json.loads(data)  
+            c = self.getContext()
+            results = c.processCommand(req)
+            self.reply(results)
+        else:
+            self.do_PAGE(data)
+
+    def do_PAGE(self, qry):
+        &#39;&#39;&#39;
+        Process page requests except /state and /run.
+        &#39;&#39;&#39;
+        self.log_message(&#34;PAGE %s&#34;, qry)
+        if os.path.exists(qry.path[1:]):
+            # try to send a file with the given name if it exists.
+            self.replyFile(qry.path[1:])
+        else:
+            # otherwise, pass on the request to the Client object. It will
+            # execute a method with the same name if it exists.
+            c = self.getContext()
+            c.showPage(self, qry.path, qry)
+
+    def log_message(self, format, *args):
+        if self.server.verbose:
+            print(format % args)</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li>http.server.SimpleHTTPRequestHandler</li>
+<li>http.server.BaseHTTPRequestHandler</li>
+<li>socketserver.StreamRequestHandler</li>
+<li>socketserver.BaseRequestHandler</li>
+</ul>
+<h3>Methods</h3>
+<dl>
+<dt id="jyserver.Server.Handler.do_GET"><code class="name flex">
+<span>def <span class="ident">do_GET</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Called by parent to process GET requests. Forwards requests to do_PAGE.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def do_GET(self):
+    &#39;&#39;&#39;
+    Called by parent to process GET requests. Forwards requests to do_PAGE.
+    &#39;&#39;&#39;
+    if not self.server._runmode: return
+    self.processCookies()
+    qry = urlparse(self.path)
+    req = dict(parse_qsl(qry.query))
+    self.server.log_message(&#34;GET %s %s&#34;, qry, req)
+    if &#34;session&#34; in req:
+        pageid = req[&#34;session&#34;]
+        self.uid = HtmlPage.pageMap[pageid]
+    else:
+        self.uid = None
+        # self.setNewUID()
+
+    if qry.path == &#34;/&#34;:
+        # result = self.server._getHome(self.uid)
+        c = self.getContext()
+        result = c.showHome()
+        if callable(result):
+            self.log_message(&#34;HOME CALL %s&#34;, result)
+            c.showPage(self, result, qry)
+        else:
+            self.log_message(&#34;HOME SEND %s&#34;, result)
+            self.reply(result)
+    elif qry.path == &#34;/appscript.js&#34;:
+        self.reply(JSCRIPT)
+    else:
+        self.do_PAGE(qry)</code></pre>
+</details>
+</dd>
+<dt id="jyserver.Server.Handler.do_PAGE"><code class="name flex">
+<span>def <span class="ident">do_PAGE</span></span>(<span>self, qry)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Process page requests except /state and /run.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def do_PAGE(self, qry):
+    &#39;&#39;&#39;
+    Process page requests except /state and /run.
+    &#39;&#39;&#39;
+    self.log_message(&#34;PAGE %s&#34;, qry)
+    if os.path.exists(qry.path[1:]):
+        # try to send a file with the given name if it exists.
+        self.replyFile(qry.path[1:])
+    else:
+        # otherwise, pass on the request to the Client object. It will
+        # execute a method with the same name if it exists.
+        c = self.getContext()
+        c.showPage(self, qry.path, qry)</code></pre>
+</details>
+</dd>
+<dt id="jyserver.Server.Handler.do_POST"><code class="name flex">
+<span>def <span class="ident">do_POST</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Called by parent to process POST requests. Handles the built-in
+/state and /run requests and forwards all others to do_PAGE.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def do_POST(self):
+    &#39;&#39;&#39;
+    Called by parent to process POST requests. Handles the built-in
+    /state and /run requests and forwards all others to do_PAGE.
+    &#39;&#39;&#39;
+    if not self.server._runmode: return
+    self.processCookies()
+    l = int(self.headers[&#34;Content-length&#34;])
+    data = self.rfile.read(l)
+    self.log_message(&#34;HTTP POST %s&#34;, data)
+    if self.path == &#34;/_process_srv0&#34;:
+        self.log_message(&#34;PROCESS %s&#34;, data)
+        req = json.loads(data)  
+        c = self.getContext()
+        results = c.processCommand(req)
+        self.reply(results)
+    else:
+        self.do_PAGE(data)</code></pre>
+</details>
+</dd>
+<dt id="jyserver.Server.Handler.getContext"><code class="name flex">
+<span>def <span class="ident">getContext</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def getContext(self):
+    return self.server._getContextForPage(self.uid)</code></pre>
+</details>
+</dd>
+<dt id="jyserver.Server.Handler.log_message"><code class="name flex">
+<span>def <span class="ident">log_message</span></span>(<span>self, format, *args)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Log an arbitrary message.</p>
+<p>This is used by all other logging functions.
+Override
+it if you have specific logging wishes.</p>
+<p>The first argument, FORMAT, is a format string for the
+message to be logged.
+If the format string contains
+any % escapes requiring parameters, they should be
+specified as subsequent arguments (it's just like
+printf!).</p>
+<p>The client ip and current date/time are prefixed to
+every message.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def log_message(self, format, *args):
+    if self.server.verbose:
+        print(format % args)</code></pre>
+</details>
+</dd>
+<dt id="jyserver.Server.Handler.processCookies"><code class="name flex">
+<span>def <span class="ident">processCookies</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Read in cookies and extract the session id.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def processCookies(self):
+    &#39;&#39;&#39;
+    Read in cookies and extract the session id.
+    &#39;&#39;&#39;
+    if self.server.useCookies:
+        self.cookies = SimpleCookie(self.headers.get(&#39;Cookie&#39;))
+        if &#34;UID&#34; in self.cookies:
+            self.uid = self.cookies[&#34;UID&#34;]
+        else:
+            self.uid = None</code></pre>
+</details>
+</dd>
+<dt id="jyserver.Server.Handler.reply"><code class="name flex">
+<span>def <span class="ident">reply</span></span>(<span>self, data, num=200)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Reply to the client with the given status code. If data is given as a string
+it will be encoded at utf8. Cookies are sent if they are used.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def reply(self, data, num=200):
+    &#39;&#39;&#39;
+    Reply to the client with the given status code. If data is given as a string
+    it will be encoded at utf8. Cookies are sent if they are used.
+    &#39;&#39;&#39;
+    self.send_response(num)
+    if self.server.useCookies:
+        self.send_header(
+            &#34;Set-Cookie&#34;, self.cookies.output(header=&#39;&#39;, sep=&#39;&#39;))
+    self.end_headers()
+
+    if data is None:
+        return
+
+    if isinstance(data, str):
+        data = data.encode(&#34;utf8&#34;)
+
+    try:
+        self.wfile.write(data)
+        self.log_message(&#34;REPLY DONE&#34;)
+    except Exception as ex:
+        traceback.print_exc()
+        self.server.log_error(&#34;Error sending: %s&#34;, str(ex))</code></pre>
+</details>
+</dd>
+<dt id="jyserver.Server.Handler.replyFile"><code class="name flex">
+<span>def <span class="ident">replyFile</span></span>(<span>self, path, num=200)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Reply to client with given file.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def replyFile(self, path, num=200):
+    &#39;&#39;&#39;
+    Reply to client with given file.
+    &#39;&#39;&#39;
+    with open(path, &#34;rb&#34;) as f:
+        block = f.read()
+        result = HtmlPage(block).html(self.uid)
+        self.reply(result)</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+<dt id="jyserver.Server.Server"><code class="flex name class">
+<span>class <span class="ident">Server</span></span>
+<span>(</span><span>appClass, port=8080, ip=None, verbose=False)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Server implements the web server, waits for connections and processes
+commands. Each browser request is handled in its own thread and so requests
+are asynchronous. The server starts listening when the "start()" method is
+called.</p>
+<h2 id="methods">Methods</h2>
+<p>start(wait, cookies)</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>appClass</code></strong></dt>
+<dd>Class that inherits Client. Note that this is the
+class name and not an instance.</dd>
+<dt><strong><code>port</code></strong></dt>
+<dd>Port to listen to (default is PORT)</dd>
+<dt><strong><code>ip</code></strong></dt>
+<dd>IP address to bind (default is all)</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class Server(ThreadingTCPServer):
+    &#39;&#39;&#39;
+    Server implements the web server, waits for connections and processes
+    commands. Each browser request is handled in its own thread and so requests
+    are asynchronous. The server starts listening when the &#34;start()&#34; method is
+    called.
+
+    Methods
+    ------------
+    start(wait, cookies)
+    &#39;&#39;&#39;
+
+    PORT = 8080
+    allow_reuse_address = True
+
+    def __init__(self, appClass, port=PORT, ip=None, verbose=False):
+        &#39;&#39;&#39;
+        Parameters
+        -------------
+        appClass
+            Class that inherits Client. Note that this is the
+            class name and not an instance.
+        port
+            Port to listen to (default is PORT)
+        ip
+            IP address to bind (default is all)
+        &#39;&#39;&#39;
+        self.verbose = verbose
+        # Instantiate objects of this class; must inherit from Client
+        self.appClass = appClass
+        self.contextMap = {}
+        # The port number
+        self.port = port
+        if ip is None:
+            ip = &#39;127.0.0.1&#39;
+        # Create the server object. Must call start() to begin listening.
+        super(Server, self).__init__((ip, port), Handler)
+
+    # def getContext(self):
+    #     return self._getContextForPage(&#39;SINGLE&#39;)
+
+    def js(self):
+        &#39;&#39;&#39;
+        If you are implementing a single application without a &#34;main&#34;
+        function, you can call this to retrieve the JS object and set
+        up for single instance execution.
+        &#39;&#39;&#39;
+        return self._getContextForPage(&#39;SINGLE&#39;, True).getJS()
+
+    def _getContextForPage(self, uid, create = False):
+        c = ClientContext._getContextForPage(uid, self.appClass, create=create, verbose=self.verbose)
+        return c
+        
+    def stop(self):
+        # self._BaseServer__shutdown_request = True
+        self._runmode = False
+        # self.shutdown()
+
+    def _runServer(self):
+        &#39;&#39;&#39;
+        Begin running the server until terminated.
+        &#39;&#39;&#39;
+        self._runmode = True
+        while self._runmode:
+            self.handle_request()
+        # self.serve_forever()
+        self.log_message(&#34;SERVER TERMINATED&#34;)
+
+    def start(self, wait=True, cookies=True):
+        &#39;&#39;&#39;
+        Start listening to the port and processing requests.
+
+        Parameters
+        ------------
+        wait
+            Start listening and wait for server to terminate. If this
+            is false, start server on new thread and continue execution.
+        cookies
+            If True, try to use cookies to keep track of sessions. This
+            enables the browser to open multiple windows that all share
+            the same Client object. If False, then cookies are disabled
+            and each tab will be it&#39;s own session.
+        &#39;&#39;&#39;
+        self.useCookies = cookies
+        if wait or hasattr(self.appClass, &#34;main&#34;):
+            self._runServer()
+        else:
+            server_thread = threading.Thread(target=self._runServer, daemon=True)
+            server_thread.start()
+
+    def log_message(self, format, *args):
+        if self.verbose:
+            print(format % args)
+    def log_error(self, format, *args):
+        print(format % args)</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li>socketserver.ThreadingTCPServer</li>
+<li>socketserver.ThreadingMixIn</li>
+<li>socketserver.TCPServer</li>
+<li>socketserver.BaseServer</li>
+</ul>
+<h3>Class variables</h3>
+<dl>
+<dt id="jyserver.Server.Server.PORT"><code class="name">var <span class="ident">PORT</span></code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+<dt id="jyserver.Server.Server.allow_reuse_address"><code class="name">var <span class="ident">allow_reuse_address</span></code></dt>
+<dd>
+<div class="desc"></div>
+</dd>
+</dl>
+<h3>Methods</h3>
+<dl>
+<dt id="jyserver.Server.Server.js"><code class="name flex">
+<span>def <span class="ident">js</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>If you are implementing a single application without a "main"
+function, you can call this to retrieve the JS object and set
+up for single instance execution.</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def js(self):
+    &#39;&#39;&#39;
+    If you are implementing a single application without a &#34;main&#34;
+    function, you can call this to retrieve the JS object and set
+    up for single instance execution.
+    &#39;&#39;&#39;
+    return self._getContextForPage(&#39;SINGLE&#39;, True).getJS()</code></pre>
+</details>
+</dd>
+<dt id="jyserver.Server.Server.log_error"><code class="name flex">
+<span>def <span class="ident">log_error</span></span>(<span>self, format, *args)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def log_error(self, format, *args):
+    print(format % args)</code></pre>
+</details>
+</dd>
+<dt id="jyserver.Server.Server.log_message"><code class="name flex">
+<span>def <span class="ident">log_message</span></span>(<span>self, format, *args)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def log_message(self, format, *args):
+    if self.verbose:
+        print(format % args)</code></pre>
+</details>
+</dd>
+<dt id="jyserver.Server.Server.start"><code class="name flex">
+<span>def <span class="ident">start</span></span>(<span>self, wait=True, cookies=True)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Start listening to the port and processing requests.</p>
+<h2 id="parameters">Parameters</h2>
+<dl>
+<dt><strong><code>wait</code></strong></dt>
+<dd>Start listening and wait for server to terminate. If this
+is false, start server on new thread and continue execution.</dd>
+<dt><strong><code>cookies</code></strong></dt>
+<dd>If True, try to use cookies to keep track of sessions. This
+enables the browser to open multiple windows that all share
+the same Client object. If False, then cookies are disabled
+and each tab will be it's own session.</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def start(self, wait=True, cookies=True):
+    &#39;&#39;&#39;
+    Start listening to the port and processing requests.
+
+    Parameters
+    ------------
+    wait
+        Start listening and wait for server to terminate. If this
+        is false, start server on new thread and continue execution.
+    cookies
+        If True, try to use cookies to keep track of sessions. This
+        enables the browser to open multiple windows that all share
+        the same Client object. If False, then cookies are disabled
+        and each tab will be it&#39;s own session.
+    &#39;&#39;&#39;
+    self.useCookies = cookies
+    if wait or hasattr(self.appClass, &#34;main&#34;):
+        self._runServer()
+    else:
+        server_thread = threading.Thread(target=self._runServer, daemon=True)
+        server_thread.start()</code></pre>
+</details>
+</dd>
+<dt id="jyserver.Server.Server.stop"><code class="name flex">
+<span>def <span class="ident">stop</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<div class="desc"></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def stop(self):
+    # self._BaseServer__shutdown_request = True
+    self._runmode = False</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+</dl>
+</section>
+</article>
+<nav id="sidebar">
+<h1>Index</h1>
+<div class="toc">
+<ul></ul>
+</div>
+<ul id="index">
+<li><h3>Super-module</h3>
+<ul>
+<li><code><a title="jyserver" href="index.html">jyserver</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-classes">Classes</a></h3>
+<ul>
+<li>
+<h4><code><a title="jyserver.Server.Client" href="#jyserver.Server.Client">Client</a></code></h4>
+<ul class="">
+<li><code><a title="jyserver.Server.Client.h" href="#jyserver.Server.Client.h">h</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="jyserver.Server.Handler" href="#jyserver.Server.Handler">Handler</a></code></h4>
+<ul class="two-column">
+<li><code><a title="jyserver.Server.Handler.do_GET" href="#jyserver.Server.Handler.do_GET">do_GET</a></code></li>
+<li><code><a title="jyserver.Server.Handler.do_PAGE" href="#jyserver.Server.Handler.do_PAGE">do_PAGE</a></code></li>
+<li><code><a title="jyserver.Server.Handler.do_POST" href="#jyserver.Server.Handler.do_POST">do_POST</a></code></li>
+<li><code><a title="jyserver.Server.Handler.getContext" href="#jyserver.Server.Handler.getContext">getContext</a></code></li>
+<li><code><a title="jyserver.Server.Handler.log_message" href="#jyserver.Server.Handler.log_message">log_message</a></code></li>
+<li><code><a title="jyserver.Server.Handler.processCookies" href="#jyserver.Server.Handler.processCookies">processCookies</a></code></li>
+<li><code><a title="jyserver.Server.Handler.reply" href="#jyserver.Server.Handler.reply">reply</a></code></li>
+<li><code><a title="jyserver.Server.Handler.replyFile" href="#jyserver.Server.Handler.replyFile">replyFile</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="jyserver.Server.Server" href="#jyserver.Server.Server">Server</a></code></h4>
+<ul class="two-column">
+<li><code><a title="jyserver.Server.Server.PORT" href="#jyserver.Server.Server.PORT">PORT</a></code></li>
+<li><code><a title="jyserver.Server.Server.allow_reuse_address" href="#jyserver.Server.Server.allow_reuse_address">allow_reuse_address</a></code></li>
+<li><code><a title="jyserver.Server.Server.js" href="#jyserver.Server.Server.js">js</a></code></li>
+<li><code><a title="jyserver.Server.Server.log_error" href="#jyserver.Server.Server.log_error">log_error</a></code></li>
+<li><code><a title="jyserver.Server.Server.log_message" href="#jyserver.Server.Server.log_message">log_message</a></code></li>
+<li><code><a title="jyserver.Server.Server.start" href="#jyserver.Server.Server.start">start</a></code></li>
+<li><code><a title="jyserver.Server.Server.stop" href="#jyserver.Server.Server.stop">stop</a></code></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</nav>
+</main>
+<footer id="footer">
+<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.8.0</a>.</p>
+</footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+<script>hljs.initHighlightingOnLoad()</script>
+</body>
+</html>

@@ -3,7 +3,7 @@ from http.server import SimpleHTTPRequestHandler
 from http.cookies import SimpleCookie
 from urllib.parse import urlparse, parse_qsl, unquote
 
-from jyserver.Server import ClientContext
+from jyserver import ClientContext
 
 import json
 import threading
