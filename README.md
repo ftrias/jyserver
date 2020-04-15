@@ -3,10 +3,10 @@
 Jyserver is a framework for simplifying the creation of font ends for apps and
 kiosks by providing real-time access to the browser's DOM and Javascript from
 the server using Python syntax. It also provides access to the Python code from
-the browser's Javascript.
+the browser's Javascript. It can be used stand-alone or with other
+frameworks such as Flask, Django, etc.
 
-The difference between this framework and others (such as Django, Flask, etc.)
-is that jyserver uses Python dynamic syntax evaluation so that you can write
+jyserver uses Python dynamic syntax evaluation so that you can write
 Python code that will dynamically be converted to JS and executed on the
 browser. On the browser end, it uses JS's dynamic Proxy object to rewrite JS
 code for execution by the server. All of this is done transparently without any
@@ -16,7 +16,7 @@ Documentation: [Class documentation](https://ftrias.github.io/jyserver/)
 
 Tutorial: [Dev.to article](https://dev.to/ftrias/simple-kiosk-framework-in-python-2ane)
 
-## Example:
+## Standalone Example:
 
 ```python
 from jserver import Client, Server
@@ -56,7 +56,41 @@ print("serving at port", httpd.port)
 httpd.start()
 ```
 
-How does this work?
+## Flask Example:
+```html
+<p id="time">TIME</p>
+<button id="reset" onclick="server.reset()">Reset</button>
+```
+
+```python
+import jyserver.Flask as jsf
+import time
+from flask import Flask, render_template, request
+
+app = Flask(__name__)
+
+@jsf.use(app)
+class App():
+    def reset(self):
+        self.start0 = time.time()
+        self.js.dom.time.innerHTML = "{:.1f}".format(0)
+
+    @jsf.task
+    def main(self):
+        self.start0 = time.time()
+        while True:
+            t = "{:.1f}".format(time.time() - self.start0)
+            self.js.dom.time.innerHTML = t
+            time.sleep(0.1)
+
+@app.route('/')
+def index_page(name=None):
+    App.main()
+    return App.render(render_template('flask-simple.html')
+```
+
+How does this work? In the standalone example, the process is below. 
+Flask is identical except for the httpd server.
 
 1. After calling `httpd.start()`, the server will listen for new http requests.
 

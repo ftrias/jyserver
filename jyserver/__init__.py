@@ -102,25 +102,26 @@ JSCRIPT = b"""
             if (request.readyState==4 && request.status==200){
                 setTimeout(evalBrowser, 1);
                 try {
-                    // console.log(request.responseText)
+                    //console.log(request.responseText) // DEBUG
                     eval(request.responseText)
                 }
                 catch(e) {
-                    console.log("ERROR", e.message)
+                    //console.log("ERROR", e.message) // DEBUG
                     setTimeout(function(){sendErrorToServer(request.responseText, e.message);}, 1);
-                    // setTimeout(evalBrowser, 10);
+                    setTimeout(evalBrowser, 10);
                 }
             }
         }
         request.open("POST", "/_process_srv0");
         request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
         request.send(JSON.stringify({"session": PAGEID, "task":"next"}));
+        //console.log("Query next commands") // DEBUG
     }
     function sendFromBrowserToServer(expression, query) {
         var value
         var error = ""
         try {
-            // console.log(query, expression)
+            //console.log(query, expression) // DEBUG
             value = eval(expression)
         }
         catch (e) {
@@ -280,10 +281,7 @@ class Client:
     '''
     def __init__(self):
         self.js     : JSchain = None
-        self._state : JSstate = None
-        self.uid              = None
-        self._handler:Handler = None
-        self._signal : threading.Event = None
+        self._state : ClientContext = None
 
     def h(self, html=None, file=None):
         '''
@@ -291,23 +289,42 @@ class Client:
         byte string. Must be called if implementing a custom page
         such as `index`.
         '''
+        return self._state.htmlsend(html, file)
+
+class ClientContext:
+    contextMap = {}
+    taskTimeout = 5
+
+    def __init__(self, cls, uid=None, verbose=False):
+        self.appClass = cls
+        self.obj = cls()
+        self.queries = {}
+        self.lock = threading.Lock()
+        self.fxn = {}
+        self.verbose : bool = verbose
+        self.tasks = queue.Queue()
+        self.uid = uid
+        self._error : Exception = None
+        self._signal : threading.Event = None
+        self.obj.js = JSroot(self)
+
+    def render(self, html):
+        page = HtmlPage(html=html)
+        html = page.html(self.uid)
+        return html
+
+    def htmlsend(self, html=None, file=None):
         page = HtmlPage(html=html, file=file)
         html = page.html(self.uid)
-        # html = self._state._server._insertJS(self.uid, text.encode("utf8"))
         self._handler.reply(html)
-        self._state._server.log_message("SET SIGNAL %s", id(self._signal))
+        self.log_message("SET SIGNAL %s", id(self._signal))
         self._signal.set()
         return page
-
-class ClientApp:
-    def __init__(self, cls):
-        self.appClass = cls
-        self.obj = None
 
     def hasMethod(self, name):
         return hasattr(self.obj, name)
 
-    def callMethod(self, name, args):
+    def callMethod(self, name, args=None):
         if hasattr(self.obj, name):
             f = getattr(self.obj, name)
             if args is None:
@@ -317,8 +334,331 @@ class ClientApp:
         else:
             raise ValueError("Method not found: " + name)
 
+    def __getattr__(self, attr):
+        '''
+        Unhandled calls to the context get routed to the app
+        object.
+        '''
+        return self.obj.__getattribute__(attr)
+
     def getJS(self):
         return self.obj.js
+
+    @classmethod
+    def _getContextForPage(self, uid, appClass, create = False, verbose = False):
+        '''
+        Retrieve the Client instance for a given session id. If `create` is
+        True, then if the app is not found a new one will be created. Otherwise
+        if the app is not found, return None.
+        '''
+        if uid and not isinstance(uid, str):
+            # if uid is a cookie, get it's value
+            uid = uid.value
+
+        # if we're not using cookies, direct links have uid of None
+        if uid is None:
+            # get first key
+            if len(self.contextMap) > 0:
+                uid = list(self.contextMap.items())[0][0]
+            else:
+                uid = None
+
+        # existing app? return it
+        if uid in self.contextMap:
+            return self.contextMap[uid]
+        else:
+            # this is a new session or invalid session
+            # assign it a new id
+            # Instantiate Client, call initialize and save it.
+            context = ClientContext(appClass, uid, verbose=verbose)
+            self.contextMap[uid] = context
+            context.log_message("NEW CONTEXT %s ID=%s", uid, id(self))
+            # If there is a "main" function, then start a new thread to run it.
+            # _mainRun will run main and terminate the server after main returns.
+            context.mainRun()
+            return context
+
+        raise ValueError(f"Invalid or empty seession id: {uid}")
+
+    def processCommand(self, req):
+        pageid = req["session"]
+        if pageid in HtmlPage.pageMap:
+            self.uid = HtmlPage.pageMap[pageid]
+        else:
+            self.log_message("Invalid page id session %s", pageid)
+            return 'Invalid pageid session: ' + pageid
+            # raise RuntimeError("Invalid pageid session: " + pageid)
+
+        HtmlPage.pageActive[pageid] = time.time()
+
+        task = req["task"]
+        self.log_message("RECEIVE TASK %s %s %s", task, self.uid, pageid)
+        if task == "state":
+            # The browser is replying to a request for data. First, find
+            # the corresponding Queue for our request.
+            q = self.getQuery(req['query'])
+            # Add the results to the Queue, the code making the request is
+            # currently waiting with a get(). This will cause that code
+            # to wake up and process the results.
+            q.put(req)
+            # confirm to the server that we have processed this.
+            return str(req)
+        elif task == "run":
+            # here, the browser is requesting we execute a statement and
+            # return the results.
+            result = self.run(req['function'], req['args'])
+            return result
+        elif task == "get":
+            # here, the browser is requesting we execute a statement and
+            # return the results.
+            result = self.get(req['expression'])
+            return result
+        elif task == "set":
+            # here, the browser is requesting we execute a statement and
+            # return the results.
+            result = self.set(req['property'], req['value'])
+            return ''
+        elif task == "async":
+            # here, the browser is requesting we execute a statement and
+            # return the results.
+            result = self.run(req['function'], req['args'], block=False)
+            return result
+        elif task == "next":
+            # the Browser is requesting we evaluate an expression and
+            # return the results.
+            script = self.getNextTask()
+            self.log_message("NEXT TASK REQUESTED IS JS %s", script)
+            return script
+        elif task == "error":
+            return ''
+            # raise RuntimeError(req['error'] + ": " + req["expr"])
+        elif task == "unload":
+            self.addEndTask()
+            HtmlPage.expire(pageid)
+            # HtmlPage.raiseException(pageid, RuntimeError("unload"))
+            self.log_message("UNLOAD %s", pageid)
+            return ''
+
+    def getQuery(self, query):
+        '''
+        Each query sent to the browser is assigned to it's own Queue to wait for 
+        a response. This function returns the Queue for the given session id and query.
+        '''
+        return self.queries[query]
+
+    def addQuery(self):
+        '''
+        Set query is assigned to it's own Queue to wait for 
+        a response. This function returns the Queue for the given session id and query.
+        '''
+        q = queue.Queue()
+        self.queries[id(q)] = q
+        return id(q), q
+
+    def delQuery(self, query):
+        '''
+        Delete query is assigned to it's own Queue to wait for 
+        a response. This function returns the Queue for the given session id and query.
+        '''
+        return self.queries[query]
+
+    def addTask(self, stmt):
+        '''
+        Add a task to the queue. If the queue is too long (5 in this case)
+        the browser is too slow for the speed at which we are sending commands.
+        In that case, wait for up to one second before sending the command.
+        Perhaps the wait time and queue length should be configurable because they
+        affect responsiveness.
+        '''
+        for _ in range(10):
+            if self.tasks.qsize() < 5:
+                self.tasks.put(stmt)
+                self.log_message("ADD TASK %s ON %d", stmt, id(self.tasks))
+                return
+            time.sleep(0.1)
+        self._error = TimeoutError("Timeout inserting task: " + stmt)
+
+
+    def run(self, function, args, block=True):
+        '''
+        Called by the framework to execute a method. This function will look for a method
+        with the given name. If it is found, it will execute it. If it is not found it
+        will return a string saying so. If there is an error during execution it will
+        return a string with the error message.
+        '''
+        self.log_message("RUN %s %s", function, args)
+        if block:
+            if not self.lock.acquire(blocking = False):
+                raise RuntimeError("App is active and would block")
+        
+        try:
+            if function == "_callfxn":
+                # first argument is the function name
+                # subsequent args are optional
+                fxn = args.pop(0)
+                f = self.fxn[fxn]
+            elif callable(function):
+                f = function
+            elif hasattr(self.obj, function):
+                f = getattr(self.obj, function)
+            else:
+                f = None
+
+            if f:
+                try:
+                    result = f(*args)
+                    ret = json.dumps({"value":JSroot._v(result)})
+                except Exception as ex:
+                    s = "%s: %s" % (type(ex).__name__, str(ex))
+                    if self.verbose: traceback.print_exc()
+                    self.log_message("Exception passed to browser: %s", s)
+                    ret = json.dumps({"error":s})
+            else:
+                result = "Unsupported: " + function + "(" + str(args) + ")"
+                ret = json.dumps({"error":str(result)})
+            self.log_message("RUN RESULT %s", ret)
+            return ret
+        finally:
+            if block:
+                self.lock.release()
+
+    def get(self, expr):
+        '''
+        Called by the framework to execute a method. This function will look for a method
+        with the given name. If it is found, it will execute it. If it is not found it
+        will return a string saying so. If there is an error during execution it will
+        return a string with the error message.
+        '''
+        self.log_message("GET EXPR %s", expr)
+        if not self.lock.acquire(blocking = False):
+            raise RuntimeError("App is active and would block")
+        
+        try:
+            if hasattr(self.obj, expr):
+                value = getattr(self.obj, expr)
+                if callable(value):
+                    value = f"(function(...args) {{ return handleApp('{expr}', args) }})"  
+                    return json.dumps({"type":"expression", "expression":value})       
+                else:
+                    return json.dumps({"type":"value", "value":value})
+            return None
+        finally:
+            self.lock.release()
+
+    def set(self, expr, value):
+        '''
+        Called by the framework to set a propery.
+        '''
+        self.log_message("SET EXPR %s = %s", expr, value)
+        self.obj.__setattr__(expr, value)
+        return value
+
+    def getNextTask(self):
+        '''
+        Wait for new tasks and return the next one. It will wait for 1 second and if
+        there are no tasks return None.
+        '''
+        try:
+            self.log_message("TASKS WAITING %d ON %d", self.tasks.qsize(), id(self.tasks))
+            return self.tasks.get(timeout=self.taskTimeout)
+        except queue.Empty:
+            return None
+
+    def addEndTask(self):
+        '''
+        Add a None task to end the queue.
+        '''
+        self.log_message("TASKS END %d ON %d", self.tasks.qsize(), id(self.tasks))
+        self.tasks.put(None)
+
+    def mainRun(self):
+        if hasattr(self.obj, "main"):
+            server_thread = threading.Thread(
+                target=self.mainRunThread, daemon=True)
+            server_thread.start()
+
+    def mainRunThread(self):
+        '''
+        Run the main function. When the function ends, terminate the server.
+        '''
+        try:
+            self.obj.main()
+        except Exception as ex:
+            self.log_message("FATAL ERROR: %s", ex)
+
+    def showPage(self, handler, path, query):
+        '''
+        Called by framework to return a queried page. When the browser requests a web page
+        (for example when a user clicks on a link), the path will get put in `path` and
+        any paramters passed through GET or POST will get passed in `query`. This will
+        look for a Client method with the same name as the page requested. If found, it will
+        execute it and return the results. If not, it will return "not found", status 404.
+        '''
+        if callable(path):
+            f = path
+        else:
+            fxn = path[1:].replace('/', '_').replace('.', '_')
+            if hasattr(self.obj, fxn):
+                f = getattr(self.obj, fxn)
+            elif path == "/favicon.ico":
+                handler.reply("Not found %s" % path, 404)
+                return
+            else:
+                raise RuntimeWarning("Page not found: " + path)
+                # return "Not found", 404
+
+        self._handler = handler
+        self._signal = threading.Event()
+        self.log_message("START PAGE %s %d", path, id(self._signal))
+        server_thread = threading.Thread(target=self.run_callable, 
+                args=(f, {"page": path, "query": query}), daemon=True)
+        server_thread.start()
+        self.log_message("WAIT ON SIGNAL %s %d", path, id(self._signal))
+        self._signal.wait() # set when HTML is sent
+        self._signal = None
+
+    def run_callable(self, f, args):
+        params = signature(f).parameters
+        try:
+            if len(params) == 0:
+                f()
+            else:
+                f(args)
+        except Exception as ex:
+            traceback.print_exc()
+            self.log_message("Exception: %s" % str(ex))
+
+    def showHome(self):
+        '''
+        Get the home page when "/" is queried and inject the appropriate javascript
+        code. Returns a byte string suitable for replying back to the browser.
+        '''
+        if hasattr(self.obj, "html"):
+            block = self.obj.html.encode("utf8")
+            page = HtmlPage(block)
+            self.activePage = page.pageid
+            return page.html(self.uid)
+        elif hasattr(self.obj, "home"):
+            path = self.obj.home
+        elif os.path.exists("index.html"):
+            path = "index.html"
+        elif hasattr(self.obj, "index"):
+            return self.obj.index
+        else:
+            raise ValueError("Could not find index or home")
+
+        with open(path, "rb") as f:
+            block = f.read()
+            page = HtmlPage(block)
+            self.activePage = page.pageid
+            return page.html(self.uid)
+
+    def log_message(self, format, *args):
+        if self.verbose:
+            print(format % args)
+
+    def log_error(self, format, *args):
+        print(format % args)
 
 class HtmlPage:
     # Patterns for matching HTML to figure out where to inject the javascript code
@@ -332,7 +672,7 @@ class HtmlPage:
 
     pageMap = {}
     pageActive = {}
-    pageThread = {}
+    # pageThread = {}
                        
     def __init__(self, html=None, file=None):
         if file:
@@ -382,7 +722,7 @@ class HtmlPage:
         the session id.
         '''
         self.pageMap[self.pageid] = uid
-        self.pageThread[self.pageid] = threading.get_ident()
+        # self.pageThread[self.pageid] = threading.get_ident()
         self.pageActive[self.pageid] = time.time()
 
         U = "var UID='{}';var PAGEID='{}';\n".format(uid, self.pageid).encode("utf8")
@@ -433,26 +773,18 @@ class Server(ThreadingTCPServer):
             IP address to bind (default is all)
         '''
         self.verbose = verbose
-        # apps keeps track of running applications
-        self.apps = {}
         # Instantiate objects of this class; must inherit from Client
         self.appClass = appClass
-        # If single is true, then only one Client instance is allowed
-        self.single = False
+        self.contextMap = {}
         # The port number
         self.port = port
-        # Patterns for matching HTML to figure out where to inject the javascript code
-        self._pscript = re.compile(
-            b'\\<script.*\\s+src\\s*=\\s*"appscript.js"')
-        self._plist = [re.compile(b'\\{\\{JSCRIPT\\}\\}', re.IGNORECASE),
-                       re.compile(b'\\<script\\>', re.IGNORECASE),
-                       re.compile(b'\\<\\/head\\>', re.IGNORECASE),
-                       re.compile(b'\\<body\\>', re.IGNORECASE),
-                       re.compile(b'\\<html\\>', re.IGNORECASE)]
         if ip is None:
             ip = '127.0.0.1'
         # Create the server object. Must call start() to begin listening.
         super(Server, self).__init__((ip, port), Handler)
+
+    # def getContext(self):
+    #     return self._getContextForPage('SINGLE')
 
     def js(self):
         '''
@@ -460,199 +792,12 @@ class Server(ThreadingTCPServer):
         function, you can call this to retrieve the JS object and set
         up for single instance execution.
         '''
-        self.single = True
-        return self._getApp('SINGLE', True).js
+        return self._getContextForPage('SINGLE', True).getJS()
 
-    def _getNewUID(self):
-        '''
-        Create a new session id.
-        '''
-        return uuid.uuid1().hex
-
-    def _getApp(self, uid, create = False):
-        '''
-        Retrieve the Client instance for a given session id. If `create` is
-        True, then if the app is not found a new one will be created. Otherwise
-        if the app is not found, return None.
-        '''
-        if self.single:
-            uid = 'SINGLE'
-        if uid and not isinstance(uid, str):
-            # if uid is a cookie, get it's value
-            uid = uid.value
-
-        # if we're not using cookies, direct links have uid of None
-        if uid is None:
-            # get first key
-            if len(self.apps) > 0:
-                uid = list(self.apps.items())[0][0]
-            else:
-                uid = None
-
-        # existing app? return it
-        if uid in self.apps:
-            return self.apps[uid]
-        else:
-            # this is a new session or invalid session
-            # assign it a new id
-            if not self.single:
-                uid = self._getNewUID()
-            self.log_message("NEW APP %s", uid)
-            # Instantiate Client, call initialize and save it.
-            a = self.appClass()
-            a._state = JSstate(self)
-            a.js = JS(a._state) # for access by Client class
-            self.apps[uid] = a
-            a.uid = uid
-            # If there is a "main" function, then start a new thread to run it.
-            # _mainRun will run main and terminate the server after main returns.
-            if hasattr(a, "main"):
-                server_thread = threading.Thread(
-                    target=self._mainRun, args=(uid,), daemon=True)
-                server_thread.start()
-            return a
-        raise ValueError(f"Invalid or empty seession id: {uid}")
-
-    def _getQuery(self, uid, query):
-        '''
-        Each query sent to the browser is assigned to it's own Queue to wait for 
-        a response. This function returns the Queue for the given session id and query.
-        '''
-        return self._getApp(uid)._state._queries[query]
-
-    def _getHome(self, uid):
-        '''
-        Get the home page when "/" is queried and inject the appropriate javascript
-        code. Returns a byte string suitable for replying back to the browser.
-        '''
-        app = self._getApp(uid)
-        if hasattr(app, "html"):
-            block = app.html.encode("utf8")
-            page = HtmlPage(block)
-            app.activePage = page.pageid
-            return page.html(uid)
-        elif hasattr(app, "home"):
-            path = app.home
-        elif os.path.exists("index.html"):
-            path = "index.html"
-        elif hasattr(app, "index"):
-            return app.index
-        else:
-            raise ValueError("Could not find index or home")
-
-        with open(path, "rb") as f:
-            block = f.read()
-            page = HtmlPage(block)
-            app.activePage = page.pageid
-            return page.html(uid)
-
-    def _getNextTask(self, uid):
-        '''
-        Wait for new tasks and return the next one. It will wait for 1 second and if
-        there are no tasks return None.
-        '''
-        try:
-            self.log_message("TASKS WAITING %d ON %d", self._getApp(uid)._state._tasks.qsize(), id(self._getApp(uid)._state._tasks))
-            return self._getApp(uid)._state._tasks.get(timeout=5)
-        except queue.Empty:
-            return None
-
-    def _addEndTask(self, uid):
-        '''
-        Add a None task to end the queue.
-        '''
-        self.log_message("TASKS END %d ON %d", self._getApp(uid)._state._tasks.qsize(), id(self._getApp(uid)._state._tasks))
-        self._getApp(uid)._state._tasks.put(None)
-
-    def _run(self, uid, function, args, block=True):
-        '''
-        Called by the framework to execute a method. This function will look for a method
-        with the given name. If it is found, it will execute it. If it is not found it
-        will return a string saying so. If there is an error during execution it will
-        return a string with the error message.
-        '''
-        self.log_message("RUN %s %s", function, args)
-        app = self._getApp(uid)
-        if block:
-            if not app._state._lock.acquire(blocking = False):
-                raise RuntimeError("App is active and would block")
+    def _getContextForPage(self, uid, create = False):
+        c = ClientContext._getContextForPage(uid, self.appClass, create=create, verbose=self.verbose)
+        return c
         
-        try:
-            if function == "_callfxn":
-                # first argument is the function name
-                # subsequent args are optional
-                fxn = args.pop(0)
-                f = app._state._fxn[fxn]
-            elif callable(function):
-                f = function
-            elif hasattr(app, function):
-                f = getattr(app, function)
-            else:
-                f = None
-
-            if f:
-                try:
-                    result = f(*args)
-                    ret = json.dumps({"value":JS._v(result)})
-                except Exception as ex:
-                    self.log_error("Exception passed to browser")
-                    traceback.print_exc()
-                    s = str(ex)
-                    self.log_message("Exception %s", s)
-                    ret = json.dumps({"error":s})
-            else:
-                result = "Unsupported: " + function + "(" + str(args) + ")"
-                ret = json.dumps({"error":str(result)})
-            self.log_message("RUN RESULT %s", ret)
-            return ret
-        finally:
-            if block:
-                app._state._lock.release()
-
-    def _get(self, uid, expr):
-        '''
-        Called by the framework to execute a method. This function will look for a method
-        with the given name. If it is found, it will execute it. If it is not found it
-        will return a string saying so. If there is an error during execution it will
-        return a string with the error message.
-        '''
-        self.log_message("GET EXPR %s", expr)
-        app = self._getApp(uid)
-        if not app._state._lock.acquire(blocking = False):
-            raise RuntimeError("App is active and would block")
-        
-        try:
-            if hasattr(app, expr):
-                value = getattr(app, expr)
-                if callable(value):
-                    value = f"(function(...args) {{ return handleApp('{expr}', args) }})"  
-                    return json.dumps({"type":"expression", "expression":value})       
-                else:
-                    return json.dumps({"type":"value", "value":value})
-            return None
-        finally:
-            app._state._lock.release()
-
-    def _set(self, uid, expr, value):
-        '''
-        Called by the framework to set a propery.
-        '''
-        self.log_message("SET EXPR %s = %s", expr, value)
-        app = self._getApp(uid)
-        app.__setattr__(expr, value)
-        return value
-
-    def _mainRun(self, uid):
-        '''
-        Run the main function. When the function ends, terminate the server.
-        '''
-        try:
-            self._getApp(uid, True).main()
-        except Exception as ex:
-            self.log_message("FATAL ERROR: %s", ex)
-        finally:
-            self.stop()
-
     def stop(self):
         # self._BaseServer__shutdown_request = True
         self._runmode = False
@@ -702,6 +847,9 @@ class Handler(SimpleHTTPRequestHandler):
     handles the page requests and delegates tasks.
     '''
 
+    def getContext(self):
+        return self.server._getContextForPage(self.uid)
+
     def reply(self, data, num=200):
         '''
         Reply to the client with the given status code. If data is given as a string
@@ -733,7 +881,6 @@ class Handler(SimpleHTTPRequestHandler):
         with open(path, "rb") as f:
             block = f.read()
             result = HtmlPage(block).html(self.uid)
-            # result = self.server._insertJS(self.uid, block)
             self.reply(result)
 
     def processCookies(self):
@@ -746,26 +893,6 @@ class Handler(SimpleHTTPRequestHandler):
                 self.uid = self.cookies["UID"]
             else:
                 self.uid = None
-
-    def setNewUID(self):
-        '''
-        If we have a new session id, set it in the approriate places.
-        '''
-        if self.server.useCookies:
-            self.cookies = SimpleCookie(self.headers.get('Cookie'))
-
-        if hasattr(self, "uid"):
-            app = self.server._getApp(self.uid)
-        else:
-            app = None
-        if app is None:
-            app = self.server._getApp(uuid.uuid1().hex, True)
-        self.uid = app.uid
-
-        if self.server.useCookies:
-            self.cookies["UID"] = self.uid
-
-        return app
 
     def do_GET(self):
         '''
@@ -780,15 +907,18 @@ class Handler(SimpleHTTPRequestHandler):
             pageid = req["session"]
             self.uid = HtmlPage.pageMap[pageid]
         else:
-            self.setNewUID()
+            self.uid = None
+            # self.setNewUID()
 
         if qry.path == "/":
-            result = self.server._getHome(self.uid)
+            # result = self.server._getHome(self.uid)
+            c = self.getContext()
+            result = c.showHome()
             if callable(result):
-                self.server.log_message("HOME CALL %s", result)
-                self._page(self.uid, result, qry)
+                self.log_message("HOME CALL %s", result)
+                c.showPage(self, result, qry)
             else:
-                self.server.log_message("HOME SEND %s", result)
+                self.log_message("HOME SEND %s", result)
                 self.reply(result)
         elif qry.path == "/appscript.js":
             self.reply(JSCRIPT)
@@ -804,66 +934,13 @@ class Handler(SimpleHTTPRequestHandler):
         self.processCookies()
         l = int(self.headers["Content-length"])
         data = self.rfile.read(l)
-        self.server.log_message("POST %s", data)
+        self.log_message("HTTP POST %s", data)
         if self.path == "/_process_srv0":
-            req = json.loads(data)
-            pageid = req["session"]
-            if pageid in HtmlPage.pageMap:
-                self.uid = HtmlPage.pageMap[pageid]
-            else:
-                self.reply('Invalid pageid seession', 404)
-                return
-                # raise RuntimeError("Invalid pageid session: " + pageid)
-   
-            HtmlPage.pageActive[pageid] = time.time()
-
-            task = req["task"]
-            self.server.log_message("TASK %s %s", task, pageid)
-            if task == "state":
-                # The browser is replying to a request for data. First, find
-                # the corresponding Queue for our request.
-                q = self.server._getQuery(self.uid, req['query'])
-                # Add the results to the Queue, the code making the request is
-                # currently waiting with a get(). This will cause that code
-                # to wake up and process the results.
-                q.put(req)
-                # confirm to the server that we have processed this.
-                self.reply(str(req))
-            elif task == "run":
-                # here, the browser is requesting we execute a statement and
-                # return the results.
-                result = self.server._run(self.uid, req['function'], req['args'])
-                self.reply(result)
-            elif task == "get":
-                # here, the browser is requesting we execute a statement and
-                # return the results.
-                result = self.server._get(self.uid, req['expression'])
-                self.reply(result)
-            elif task == "set":
-                # here, the browser is requesting we execute a statement and
-                # return the results.
-                result = self.server._set(self.uid, req['property'], req['value'])
-                self.reply('')
-            elif task == "async":
-                # here, the browser is requesting we execute a statement and
-                # return the results.
-                result = self.server._run(self.uid, req['function'], req['args'], block=False)
-                self.reply(result)
-            elif task == "next":
-                # the Browser is requesting we evaluate an expression and
-                # return the results.
-                script = self.server._getNextTask(self.uid)
-                self.log_message("NEXT TASK REQUESTED IS JS %s", script)
-                self.reply(script)
-            elif task == "error":
-                self.reply('')
-                raise RuntimeError(req['error'] + ": " + req["expr"])
-            elif task == "unload":
-                self.server._addEndTask(self.uid)
-                HtmlPage.expire(pageid)
-                # HtmlPage.raiseException(pageid, RuntimeError("unload"))
-                self.server.log_message("UNLOAD %s", pageid)
-                self.reply('')
+            self.log_message("PROCESS %s", data)
+            req = json.loads(data)  
+            c = self.getContext()
+            results = c.processCommand(req)
+            self.reply(results)
         else:
             self.do_PAGE(data)
 
@@ -878,73 +955,14 @@ class Handler(SimpleHTTPRequestHandler):
         else:
             # otherwise, pass on the request to the Client object. It will
             # execute a method with the same name if it exists.
-            if hasattr(self, "uid"):
-                # uid set so we're goog
-                self._page(self.uid, qry.path, qry)
-                return
-            else:
-                # if uid is not set, then cookies are disabled and user
-                # clicked on an uncontrolled link, so do our best
-                # to guess a context
-                self._page(None, qry.path, qry)
-                return
-
-        # ERROR!!!
-        return
-            # if isinstance(reply, list) or isinstance(reply, tuple):
-            #     self.reply(*reply)
-            # else:
-            #     self.reply(reply)
-
-    def _page(self, uid, path, query):
-        '''
-        Called by framework to return a queried page. When the browser requests a web page
-        (for example when a user clicks on a link), the path will get put in `path` and
-        any paramters passed through GET or POST will get passed in `query`. This will
-        look for a Client method with the same name as the page requested. If found, it will
-        execute it and return the results. If not, it will return "not found", status 404.
-        '''
-        app = self.server._getApp(uid)
-        if callable(path):
-            f = path
-        else:
-            fxn = path[1:].replace('/', '_').replace('.', '_')
-            if hasattr(app, fxn):
-                f = getattr(app, fxn)
-            elif path == "/favicon.ico":
-                self.reply("Not found %s" % path, 404)
-                return
-            else:
-                raise RuntimeWarning("Page not found: " + path)
-                # return "Not found", 404
-
-        app._handler = self
-        app._signal = threading.Event()
-        self.log_message("START PAGE %s %d", path, id(app._signal))
-        server_thread = threading.Thread(target=Handler.run_callable, 
-                args=(f, self.server, {"page": path, "query": query}), daemon=True)
-        server_thread.start()
-        self.log_message("WAIT ON SIGNAL %s %d", path, id(app._signal))
-        app._signal.wait() # set when HTML is sent
-        app._signal = None
-
-    @staticmethod
-    def run_callable(f, server, args):
-        params = signature(f).parameters
-        try:
-            if len(params) == 0:
-                f()
-            else:
-                f(args)
-        except Exception as ex:
-            traceback.print_exc()
-            server.log_error("Exception: %s" % str(ex))
+            c = self.getContext()
+            c.showPage(self, qry.path, qry)
 
     def log_message(self, format, *args):
         if self.server.verbose:
             print(format % args)
 
-class JSstate:
+class XJSstate:
     '''
     JState keeps track of the Javascript state on the browser.
 
@@ -1069,7 +1087,7 @@ class JSchain:
         return self
 
     def __setattr__(self, attr, value):
-        value = JS._v(value)
+        value = JSroot._v(value)
         if attr == "chain" or attr == "state" or attr == "keep":
             # ignore our own attributes. If an attribute is added to "self" it
             # should be added here. I suppose this could be evaluated dynamically
@@ -1088,7 +1106,7 @@ class JSchain:
         if callable(value):
             # is this a function call?
             idx = id(value)
-            self.state._fxn[idx] = value
+            self.state.fxn[idx] = value
             self._add(attr, dot=adot)
             self._add(f"=function(){{server._callfxn({idx});}}", dot=False)
         else:
@@ -1121,8 +1139,8 @@ class JSchain:
         `self.js.func(15)`.
         '''
         # evaluate the arguments
-        p1 = [json.dumps(JS._v(v)) for v in args]
-        p2 = [json.dumps(JS._v(v)) for k, v in kwargs.items()]
+        p1 = [json.dumps(JSroot._v(v)) for v in args]
+        p2 = [json.dumps(JSroot._v(v)) for k, v in kwargs.items()]
         s = ','.join(p1 + p2)
         # create the function call
         self._add('('+s+')', dot=False)
@@ -1142,26 +1160,10 @@ class JSchain:
         '''
         return (''.join(self.chain)).encode("utf8")
 
-    def _addTask(self, stmt):
-        '''
-        Add a task to the queue. If the queue is too long (5 in this case)
-        the browser is too slow for the speed at which we are sending commands.
-        In that case, wait for up to one second before sending the command.
-        Perhaps the wait time and queue length should be configurable because they
-        affect responsiveness.
-        '''
-        for _ in range(10):
-            if self.state._tasks.qsize() < 5:
-                self.state._tasks.put(stmt)
-                self.state._server.log_message("ADD TASK %s ON %d", stmt, id(self.state._tasks))
-                return
-            time.sleep(0.1)
-        self.state._error = TimeoutError("Timeout inserting task: " + stmt)
-
     def evalAsync(self):
         if self.keep:
             stmt = self._statement()
-            self._addTask(stmt)
+            self.state.addTask(stmt)
             # mark it as evaluated
             self.keep = False
 
@@ -1212,7 +1214,7 @@ class JSchain:
         if self.keep:
             stmt = self._statement()
             # print("EXEC", stmt)
-            if self.state._lock.locked():
+            if self.state.lock.locked():
                 # print("ASYNC", stmt)
                 # running within a query, so just run it async
                 self._addTask(stmt)
@@ -1269,20 +1271,20 @@ class JSchain:
         stmt = self._statement()
         # print("EVAL", stmt)
 
-        if self.state._lock.locked():
-            self.state._server.log_error("App is active so you cannot manipulate JS for: %s" % stmt)
+        c = self.state
+
+        if c.lock.locked():
+            c.log_error("App is active so you cannot manipulate JS for: %s" % stmt)
             raise RuntimeError("App is active so you cannot manipulate JS for: %s" % stmt)
 
-        q = queue.Queue()
-        idx = id(q)
-        self.state._queries[idx] = q
+        idx, q = c.addQuery()
         data = json.dumps(stmt)
         cmd = "sendFromBrowserToServer({}, {})".format(data, idx)
-        self._addTask(cmd)
+        c.addTask(cmd)
         try:
-            self.state._server.log_message("WAITING ON RESULT QUEUE")
+            c.log_message("WAITING ON RESULT QUEUE")
             result = q.get(timeout=timeout)
-            del self.state._queries[idx]
+            c.delQuery(idx)
         except queue.Empty:
             # self.state._server.log_message("TIMEOUT waiting on: %s", stmt)
             raise TimeoutError("Timout waiting on: %s" % stmt)
@@ -1375,16 +1377,16 @@ class JSchain:
     # def __missing__(self, key): return self.eval().__missing__(key)
 
 
-class JS:
+class JSroot:
     '''
     JS handles the lifespan of JSchain objects and things like setting
-    and evaluation.
+    and evaluation on the root object.
 
     Example:
     --------------
     ```
-    state = JSstate(server)
-    js = JS(state)
+    state = ClientContext(AppClass)
+    js = JSroot(state)
     js.document.getElementById("txt").value = 25
     ```
     '''
@@ -1430,10 +1432,10 @@ class JS:
         it directly.
         '''
         # if the value to be assigned is itself a JSchain, evaluate it
-        value = JS._v(value)
+        value = JSroot._v(value)
         # don't process our own attributes
         if attr == "state" or attr == "linkset" or attr == "linkcall":
-            super(JS, self).__setattr__(attr, value)
+            super(JSroot, self).__setattr__(attr, value)
             return value
         # create a new JSchain
         c = self.__getattr__(attr)
@@ -1446,7 +1448,7 @@ class JS:
         pass
 
     def __setitem__(self, key, value):
-        value = JS._v(value)
+        value = JSroot._v(value)
         if key in self.linkcall:
             c = self.linkcall[key]
             if isinstance(c, JSchain):

@@ -14,7 +14,15 @@ function fset(a){document.getElementById("time").innerHTML = a}
 function fsetApp(a,b){document.getElementById("time").innerHTML = app.addNumbers(a,b)}
 function faddApp(a,b){return app.addNumbers(a,b)}
 function fsetTestApp(){return server.nothingHere()}
-function fsetThrow(){return server.throwError()}
+function fsetThrow(){
+    try {
+        app.throwError()
+        return 1
+    } catch(e) {
+        console.log("CRASH", e)
+        return 2
+    }
+}
 function fThrow(i){fnothing();}
 function fsetTest(){document.getElementById("time").innerHTML = "TEST"}
 function add2(a,b){return a+b}
@@ -25,7 +33,7 @@ function add2(a,b){return a+b}
         return a/0
 
     def throwError(self):
-        raise ValueError("Throw error message")
+        raise ValueError("Fatal error from server")
 
 class MyTest(unittest.TestCase):
     @classmethod
@@ -38,10 +46,10 @@ class MyTest(unittest.TestCase):
         global httpd
         httpd.stop()
 
-    def test_call(self):
-        # this throws in the browser's context, so we don't see it 
-        # except as a console message
-        self.js.fsetThrow()
+    def test_browser_raise(self):
+        # this throws in the browser's context
+        x = self.js.fsetThrow()
+        self.assertEqual(x, 2)
 
     def test_call_throw(self):
         with self.assertRaises(RuntimeError):

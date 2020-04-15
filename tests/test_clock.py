@@ -71,10 +71,10 @@ function executeTask() {
         while page.alive():
             if self.running:
                 self.js.dom.time.innerHTML = "{:.1f}".format(time.time() - self.start0)
-            time.sleep(.1)
+            time.sleep(1)
         print("index done")
  
-httpd = Server(App, verbose=False)
+httpd = Server(App, verbose=True)
 print("serving at port", httpd.port)
 # import webbrowser
 # webbrowser.open(f'http://localhost:{httpd.port}')

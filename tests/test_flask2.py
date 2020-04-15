@@ -1,11 +1,14 @@
-#!/usr/env/bin python3
-
+import context
 import unittest
-from context import jyserver
-from jyserver import Server, Client
+
+import jyserver.Flask as jsf
 import time
 
-class App(Client):
+from flask import Flask, render_template, request
+app = Flask(__name__)
+
+@jsf.use(app)
+class App:
     def __init__(self):
         self.html = '''
 <script>
@@ -29,16 +32,18 @@ function add2(a,b){return a+b}
     def throwError(self):
         raise ValueError("Throw error message")
 
+@jsf.task
+def runApp():
+    app.run()
+
+@app.route('/')
+def hello_world():
+    return App.render(render_template('flask1.html'))
+
 class MyTest(unittest.TestCase):
     @classmethod
     def setUpClass(self):
-        global httpd
-        self.js = httpd.js()
-    
-    @classmethod
-    def tearDownClass(self):
-        global httpd
-        httpd.stop()
+        self.js = App.getJS()
 
     def test_call(self):
         v = self.js.multNum(5,6)
@@ -104,10 +109,5 @@ class MyTest(unittest.TestCase):
 
 if __name__ == '__main__': 
 
-    httpd = Server(App, verbose=False)
-    print("serving at port", httpd.port)
-    import webbrowser
-    # webbrowser.open(f'http://localhost:{httpd.port}')
-    httpd.start(wait=False)
-  
+    runApp()
     unittest.main() 

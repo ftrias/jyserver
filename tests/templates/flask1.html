@@ -1,0 +1,13 @@
+<!doctype html>
+<script>
+  function multNum(a,b){return a*b}
+  function fset(a){document.getElementById("time").innerHTML = a}
+  function fset2(){document.getElementById("time").innerHTML = "T2"}
+  function fsetApp(a,b){document.getElementById("time").innerHTML = app.addNumbers(a,b)}
+  function faddApp(a,b){return app.addNumbers(a,b)}
+  function fsetTestApp(){return server.setTestText()}
+  function fsetThrow(){return server.throwError()}
+  function add2(a,b){return a+b}
+  </script>
+<p id="time">NOW</p>
+<button id="b1" onclick="server.setTestText()">Reset</button>
