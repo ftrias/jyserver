@@ -1,4 +1,4 @@
-from jyserver import Client, Server
+from jyserver.Server import Client, Server
 class App(Client):
     def __init__(self):
         self.count = 0

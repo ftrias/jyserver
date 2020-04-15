@@ -1,7 +1,7 @@
 #!/usr/env/bin python3
 
 from context import jyserver
-from jyserver import Server, Client
+from jyserver.Server import Server, Client
 import time
 
 class App(Client):

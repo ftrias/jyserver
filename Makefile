@@ -13,12 +13,13 @@ clean:
 	rm -r *.egg-info
 
 install: wheel
-	pip install --force dist/jyserver-0.0.1-py3-none-any.whl
+	pip install --force dist/jyserver-*-py3-none-any.whl
 
 upload: wheel
 	twine upload dist/*
 
 html: docs
-	pdoc --html --html-dir docs --all-submodules jyserver
-	
+	# pdoc --html --html-dir docs --all-submodules jyserver
+	pdoc3 --html -o docs --force jyserver
+
 .PHONY: init test
