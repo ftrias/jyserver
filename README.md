@@ -63,19 +63,19 @@ httpd.start()
 ```
 
 ```python
-import jyserver.Flask as jsf
+import jyserver.Flask as js
 import time
 from flask import Flask, render_template, request
 
 app = Flask(__name__)
 
-@jsf.use(app)
+@js.use(app)
 class App():
     def reset(self):
         self.start0 = time.time()
         self.js.dom.time.innerHTML = "{:.1f}".format(0)
 
-    @jsf.task
+    @js.task
     def main(self):
         self.start0 = time.time()
         while True:
@@ -93,16 +93,16 @@ def index_page(name=None):
 
 ```python
 from django.shortcuts import render
-import jyserver.Django as jsd
+import jyserver.Django as js
 import time
 
-@jsd.use
+@js.use
 class App():
     def reset(self):
         self.start0 = time.time()
         self.js.dom.time.innerHTML = "{:.1f}".format(0)
 
-    @jsd.task
+    @js.task
     def main(self):
         self.start0 = time.time()
         while True:
@@ -121,6 +121,43 @@ In your `urls.py` add this path:
 from jyserver.Django import process
 ...
     url(r'^_process_srv0$', process, name='process'),
+```
+
+## Bottle example
+
+A Bottle application using the built-in server can only be single threaded and thus
+all features may not work as expected. Most significantly, you cannot
+evaluate Javascript expressions from server callbacks. This limitation
+is not present if using a multi-threaded server.
+
+```python
+from bottle import route, run
+import jyserver.Bottle as js
+import time
+
+@js.use
+class App():
+    def reset(self):
+        self.start0 = time.time()
+
+    @js.task
+    def main(self):
+        self.start0 = time.time()
+        while True:
+            t = "{:.1f}".format(time.time() - self.start0)
+            self.js.dom.time.innerHTML = t
+            time.sleep(0.1)
+
+@route('/')
+def index():
+    html = """
+        <p id="time">WHEN</p>
+        <button id="b1" onclick="server.reset()">Reset</button>
+    """
+    App.main()
+    return App.render(html)
+
+run(host='localhost', port=8080)
 ```
 
 ## Internals

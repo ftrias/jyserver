@@ -102,11 +102,11 @@ JSCRIPT = b"""
             if (request.readyState==4 && request.status==200){
                 setTimeout(evalBrowser, 1);
                 try {
-                    console.log(request.responseText) // DEBUG
+                    //console.log(request.responseText) // DEBUG
                     eval(request.responseText)
                 }
                 catch(e) {
-                    console.log("ERROR", e.message) // DEBUG
+                    //console.log("ERROR", e.message) // DEBUG
                     setTimeout(function(){sendErrorToServer(request.responseText, e.message);}, 1);
                     setTimeout(evalBrowser, 10);
                 }
@@ -115,7 +115,7 @@ JSCRIPT = b"""
         request.open("POST", "/_process_srv0");
         request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
         request.send(JSON.stringify({"session": PAGEID, "task":"next"}));
-        console.log("Query next commands") // DEBUG
+        //console.log("Query next commands") // DEBUG
     }
     function sendFromBrowserToServer(expression, query) {
         var value
@@ -133,6 +133,7 @@ JSCRIPT = b"""
         request.open("POST", "/_process_srv0");
         request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
         request.send(JSON.stringify({"session":PAGEID, "task":"state", "value":value, "query":query, "error": error}));
+        //console.log("response",value) // DEBUG
     }
     function sendErrorToServer(expr, e) {
         var request = new XMLHttpRequest();
@@ -162,6 +163,7 @@ JSCRIPT = b"""
                 request.open("POST", "/_process_srv0");
                 request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
                 request.send(JSON.stringify({"session":PAGEID, "task":"async", "function":property, "args":args}));
+                //console.log("send asynch",property,args) // DEBUG
             }            
         }
     });
