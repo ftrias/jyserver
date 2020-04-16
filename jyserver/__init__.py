@@ -95,15 +95,15 @@ JSCRIPT = b"""
         var request = new XMLHttpRequest();
         request.onreadystatechange = function() {
             if (request.readyState==4 && request.status==200){
-                setTimeout(evalBrowser, 1);
                 try {
-                    //console.log(request.responseText) // DEBUG
+                    //console.log("Next async task", request.responseText) // DEBUG
                     eval(request.responseText)
+                    //console.log("Done")
+                    setTimeout(evalBrowser, 1);
                 }
                 catch(e) {
-                    //console.log("ERROR", e.message) // DEBUG
-                    setTimeout(function(){sendErrorToServer(request.responseText, e.message);}, 1);
-                    setTimeout(evalBrowser, 10);
+                    console.log("ERROR", e.message) // DEBUG
+                    setTimeout(function(){sendErrorToServer(request.responseText, e.message); evalBrowser();}, 1);
                 }
             }
         }
@@ -116,8 +116,9 @@ JSCRIPT = b"""
         var value
         var error = ""
         try {
-            //console.log(query, expression) // DEBUG
+            //console.log("Evaluate", query, expression) // DEBUG
             value = eval(expression)
+            //console.log("Result", value)
         }
         catch (e) {
             value = 0
@@ -237,6 +238,7 @@ class ClientContext:
         self._error = None
         self._signal = None
         self.obj.js = JSroot(self)
+        self.singleThread = False
 
     def render(self, html):
         # for Django support
@@ -367,8 +369,9 @@ class ClientContext:
             self.log_message("NEXT TASK REQUESTED IS JS %s", script)
             return script
         elif task == "error":
+            # return ''
+            self._error = RuntimeError(req['error'] + ": " + req["expr"])
             return ''
-            # raise RuntimeError(req['error'] + ": " + req["expr"])
         elif task == "unload":
             self.addEndTask()
             HtmlPage.expire(pageid)
@@ -413,7 +416,7 @@ class ClientContext:
                 self.log_message("ADD TASK %s ON %d", stmt, id(self.tasks))
                 return
             time.sleep(0.1)
-        self._error = TimeoutError("Timeout inserting task: " + stmt)
+        self._error = TimeoutError("Timeout (deadlock?) inserting task: " + stmt)
 
 
     def run(self, function, args, block=True):
@@ -894,7 +897,7 @@ class JSchain:
             self.execExpression()
         except Exception as ex:
             self.state._error = ex
-            self.state._server.log_error("Uncatchable exception: %s", str(ex))
+            self.state.log_error("Uncatchable exception: %s", str(ex))
             raise ex
 
     def execExpression(self):
@@ -902,18 +905,18 @@ class JSchain:
         if self.keep:
             stmt = self._statement()
             # print("EXEC", stmt)
-            if self.state.lock.locked():
-                # print("ASYNC", stmt)
-                # running within a query, so just run it async
-                self._addTask(stmt)
+            if self.state.singleThread:
+                # print("ASYNC0", stmt)
+                # can't run multiple queries, so just run it async
+                self.state.addTask(stmt)
             else:
                 # otherwise, wait for evaluation
                 # print("SYNC", stmt)
                 try:
                     self.eval()
-                except Exception as ex:
+                finally:
                     self.keep = False
-                    raise ex
+
             # mark it as evaluated
             self.keep = False
 
@@ -961,28 +964,34 @@ class JSchain:
 
         c = self.state
 
-        if c.lock.locked():
-            c.log_error("App is active so you cannot manipulate JS for: %s" % stmt)
-            raise RuntimeError("App is active so you cannot manipulate JS for: %s" % stmt)
-
-        idx, q = c.addQuery()
-        data = json.dumps(stmt)
-        cmd = "sendFromBrowserToServer({}, {})".format(data, idx)
-        c.addTask(cmd)
-        try:
-            c.log_message("WAITING ON RESULT QUEUE")
-            result = q.get(timeout=timeout)
-            c.delQuery(idx)
-        except queue.Empty:
-            # self.state._server.log_message("TIMEOUT waiting on: %s", stmt)
-            raise TimeoutError("Timout waiting on: %s" % stmt)
-        if result["error"] != "":
-            # self.state._server.log_error("ERROR EVAL %s : %s", result["error"], stmt)
-            raise RuntimeError(result["error"] + ": " + stmt)
-        if "value" in result:
-            return result["value"]
-        else:
+        if not c.lock.acquire(blocking = False):
+            c.log_error("App is active so you cannot wait for result of JS: %s" % stmt)
+            c.addTask(stmt)
             return 0
+            # raise RuntimeError("App is active so you cannot evaluate JS for: %s" % stmt)
+
+        try:
+            idx, q = c.addQuery()
+            data = json.dumps(stmt)
+            cmd = "sendFromBrowserToServer({}, {})".format(data, idx)
+            c.addTask(cmd)
+            try:
+                c.log_message("WAITING ON RESULT QUEUE")
+                result = q.get(timeout=timeout)
+                c.log_message("RESULT QUEUE %s", result)
+                c.delQuery(idx)
+            except queue.Empty:
+                c.log_message("TIMEOUT waiting on: %s", stmt)
+                raise TimeoutError("Timout waiting on: %s" % stmt)
+            if result["error"] != "":
+                c.log_error("ERROR EVAL %s : %s", result["error"], stmt)
+                raise RuntimeError(result["error"] + ": " + stmt)
+            if "value" in result:
+                return result["value"]
+            else:
+                return 0
+        finally:
+            c.lock.release()
 
     #
     # Magic methods. We create these methods for force the

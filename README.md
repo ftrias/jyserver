@@ -16,6 +16,8 @@ Documentation: [Class documentation](https://ftrias.github.io/jyserver/)
 
 Tutorial: [Dev.to article](https://dev.to/ftrias/simple-kiosk-framework-in-python-2ane)
 
+Tutorial Flask: [Dev.to Flask article](https://dev.to/ftrias/access-js-dom-from-flask-app-using-jyserver-23h9)
+
 ## Standalone Example:
 
 ```python
@@ -57,6 +59,7 @@ httpd.start()
 ```
 
 ## Flask Example:
+
 ```html
 <p id="time">TIME</p>
 <button id="reset" onclick="server.reset()">Reset</button>

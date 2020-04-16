@@ -1,16 +1,8 @@
-import context
 import unittest
-
-import jyserver.Flask as jsf
+from context import jyserver
 import time
 
-from flask import Flask, render_template, request
-app = Flask(__name__)
-
-@jsf.use(app)
-class App:
-    def __init__(self):
-        self.html = '''
+test_html = '''
 <script>
 function multNum(a,b){return a*b}
 function fset(a){document.getElementById("time").innerHTML = a}
@@ -23,6 +15,10 @@ function add2(a,b){return a+b}
 </script>
 <p id="time">NOW</p>
 '''
+
+class TemplateApp:
+    js = None
+    
     def addNumbers(self, a, b):
         return a+b
 
@@ -32,18 +28,8 @@ function add2(a,b){return a+b}
     def throwError(self):
         raise ValueError("Throw error message")
 
-@jsf.task
-def runApp():
-    app.run()
-
-@app.route('/')
-def hello_world():
-    return App.render(render_template('flask1.html'))
-
-class MyTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(self):
-        self.js = App.getJS()
+class TemplateVarTest(unittest.TestCase):
+    js = None
 
     def test_call(self):
         v = self.js.multNum(5,6)
@@ -54,8 +40,8 @@ class MyTest(unittest.TestCase):
         self.assertEqual(self.js.dom.time.innerHTML, "T2")
         self.js.fsetTestApp()
         self.assertEqual(self.js.dom.time.innerHTML, "ABC123")
-        self.js.fsetApp(12, 20)
-        self.assertEqual(self.js.dom.time.innerHTML, "32")
+        # self.js.fsetApp(12, 20)
+        # self.assertEqual(self.js.dom.time.innerHTML, "32")
 
     def test_float(self):
         self.js.valfloat = 1.5
@@ -106,8 +92,3 @@ class MyTest(unittest.TestCase):
             print(self.js.dom.time1.innerHTML)
         with self.assertRaises(RuntimeError):
             self.js.dom.time1.innerHTML = "thisfail"
-
-if __name__ == '__main__': 
-
-    runApp()
-    unittest.main() 
