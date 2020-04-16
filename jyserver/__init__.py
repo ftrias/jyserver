@@ -2,42 +2,41 @@
 Jyserver is a framework for simplifying the creation of font ends for apps and
 kiosks by providing real-time access to the browser's DOM and Javascript from
 the server using Python syntax. It also provides access to the Python code from
-the browser's Javascript.
+the browser's Javascript. It can be used stand-alone or with other
+frameworks such as Flask, Django, etc. See examples folder.
 
-The difference between this framework and others (such as Django, Flask, etc.)
-is that jyserver uses Python dynamic syntax evaluation so that you can write
-Python code that will dynamically be converted to JS and executed on the
-browser. On the browser end, it uses JS's dynamic Proxy object to rewrite JS
-code for execution by the server. All of this is done transparently without any
-additional libraries or code. See example below.
+Source: https://github.com/ftrias/jyserver
 
-Documentation: [Class documentation](https://ftrias.github.io/jyserver/)
-
-Tutorial: [Dev.to article](https://dev.to/ftrias/simple-kiosk-framework-in-python-2ane)
-
-Self-contained example:
+Example using Bottle
 -------------------------------
 ```
-class App(Client):
-    def __init__(self):
-        self.html = """
-        <p id="time">TIME</p>
-        <button id="reset" onclick="server.reset()">Reset</button>
-        """
+from bottle import route, run
+import jyserver.Bottle as js
+import time
 
+@js.use
+class App():
     def reset(self):
         self.start0 = time.time()
-        self.js.dom.time.innerHTML = "{:.1f}".format(0)
 
+    @js.task
     def main(self):
         self.start0 = time.time()
         while True:
-            self.js.dom.time.innerHTML = "{:.1f}".format(time.time() - self.start0)
+            t = "{:.1f}".format(time.time() - self.start0)
+            self.js.dom.time.innerHTML = t
             time.sleep(0.1)
 
-httpd = Server(App)
-print("serving at port", httpd.port)
-httpd.start()
+@route('/')
+def index():
+    html = """
+        <p id="time">WHEN</p>
+        <button id="b1" onclick="server.reset()">Reset</button>
+    """
+    App.main()
+    return App.render(html)
+
+run(host='localhost', port=8080)
 ```
 '''
 

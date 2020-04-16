@@ -131,7 +131,7 @@ from jyserver.Django import process
 A Bottle application using the built-in server can only be single threaded and thus
 all features may not work as expected. Most significantly, you cannot
 evaluate Javascript expressions from server callbacks. This limitation
-is not present if using a multi-threaded server.
+is not present if using a multi-threaded server such as tornado.
 
 ```python
 from bottle import route, run

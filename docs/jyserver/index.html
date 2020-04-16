@@ -24,36 +24,37 @@ kiosks by providing real-time access to the browser&#39;s DOM and …" />
 <p>Jyserver is a framework for simplifying the creation of font ends for apps and
 kiosks by providing real-time access to the browser's DOM and Javascript from
 the server using Python syntax. It also provides access to the Python code from
-the browser's Javascript.</p>
-<p>The difference between this framework and others (such as Django, Flask, etc.)
-is that jyserver uses Python dynamic syntax evaluation so that you can write
-Python code that will dynamically be converted to JS and executed on the
-browser. On the browser end, it uses JS's dynamic Proxy object to rewrite JS
-code for execution by the server. All of this is done transparently without any
-additional libraries or code. See example below.</p>
-<p>Documentation: <a href="https://ftrias.github.io/jyserver/">Class documentation</a></p>
-<p>Tutorial: <a href="https://dev.to/ftrias/simple-kiosk-framework-in-python-2ane">Dev.to article</a></p>
-<h2 id="self-contained-example">Self-contained example:</h2>
-<pre><code>class App(Client):
-    def __init__(self):
-        self.html = &quot;&quot;&quot;
-        &lt;p id=&quot;time&quot;&gt;TIME&lt;/p&gt;
-        &lt;button id=&quot;reset&quot; onclick=&quot;server.reset()&quot;&gt;Reset&lt;/button&gt;
-        &quot;&quot;&quot;
+the browser's Javascript. It can be used stand-alone or with other
+frameworks such as Flask, Django, etc. See examples folder.</p>
+<p>Source: <a href="https://github.com/ftrias/jyserver">https://github.com/ftrias/jyserver</a></p>
+<h2 id="example-using-bottle">Example Using Bottle</h2>
+<pre><code>from bottle import route, run
+import jyserver.Bottle as js
+import time
 
+@js.use
+class App():
     def reset(self):
         self.start0 = time.time()
-        self.js.dom.time.innerHTML = &quot;{:.1f}&quot;.format(0)
 
+    @js.task
     def main(self):
         self.start0 = time.time()
         while True:
-            self.js.dom.time.innerHTML = &quot;{:.1f}&quot;.format(time.time() - self.start0)
+            t = &quot;{:.1f}&quot;.format(time.time() - self.start0)
+            self.js.dom.time.innerHTML = t
             time.sleep(0.1)
 
-httpd = Server(App)
-print(&quot;serving at port&quot;, httpd.port)
-httpd.start()
+@route('/')
+def index():
+    html = &quot;&quot;&quot;
+        &lt;p id=&quot;time&quot;&gt;WHEN&lt;/p&gt;
+        &lt;button id=&quot;b1&quot; onclick=&quot;server.reset()&quot;&gt;Reset&lt;/button&gt;
+    &quot;&quot;&quot;
+    App.main()
+    return App.render(html)
+
+run(host='localhost', port=8080)
 </code></pre>
 <details class="source">
 <summary>
@@ -63,42 +64,41 @@ httpd.start()
 Jyserver is a framework for simplifying the creation of font ends for apps and
 kiosks by providing real-time access to the browser&#39;s DOM and Javascript from
 the server using Python syntax. It also provides access to the Python code from
-the browser&#39;s Javascript.
+the browser&#39;s Javascript. It can be used stand-alone or with other
+frameworks such as Flask, Django, etc. See examples folder.
 
-The difference between this framework and others (such as Django, Flask, etc.)
-is that jyserver uses Python dynamic syntax evaluation so that you can write
-Python code that will dynamically be converted to JS and executed on the
-browser. On the browser end, it uses JS&#39;s dynamic Proxy object to rewrite JS
-code for execution by the server. All of this is done transparently without any
-additional libraries or code. See example below.
+Source: https://github.com/ftrias/jyserver
 
-Documentation: [Class documentation](https://ftrias.github.io/jyserver/)
-
-Tutorial: [Dev.to article](https://dev.to/ftrias/simple-kiosk-framework-in-python-2ane)
-
-Self-contained example:
+Example using Bottle
 -------------------------------
 ```
-class App(Client):
-    def __init__(self):
-        self.html = &#34;&#34;&#34;
-        &lt;p id=&#34;time&#34;&gt;TIME&lt;/p&gt;
-        &lt;button id=&#34;reset&#34; onclick=&#34;server.reset()&#34;&gt;Reset&lt;/button&gt;
-        &#34;&#34;&#34;
+from bottle import route, run
+import jyserver.Bottle as js
+import time
 
+@js.use
+class App():
     def reset(self):
         self.start0 = time.time()
-        self.js.dom.time.innerHTML = &#34;{:.1f}&#34;.format(0)
 
+    @js.task
     def main(self):
         self.start0 = time.time()
         while True:
-            self.js.dom.time.innerHTML = &#34;{:.1f}&#34;.format(time.time() - self.start0)
+            t = &#34;{:.1f}&#34;.format(time.time() - self.start0)
+            self.js.dom.time.innerHTML = t
             time.sleep(0.1)
 
-httpd = Server(App)
-print(&#34;serving at port&#34;, httpd.port)
-httpd.start()
+@route(&#39;/&#39;)
+def index():
+    html = &#34;&#34;&#34;
+        &lt;p id=&#34;time&#34;&gt;WHEN&lt;/p&gt;
+        &lt;button id=&#34;b1&#34; onclick=&#34;server.reset()&#34;&gt;Reset&lt;/button&gt;
+    &#34;&#34;&#34;
+    App.main()
+    return App.render(html)
+
+run(host=&#39;localhost&#39;, port=8080)
 ```
 &#39;&#39;&#39;
 
@@ -156,15 +156,15 @@ JSCRIPT = b&#34;&#34;&#34;
         var request = new XMLHttpRequest();
         request.onreadystatechange = function() {
             if (request.readyState==4 &amp;&amp; request.status==200){
-                setTimeout(evalBrowser, 1);
                 try {
-                    //console.log(request.responseText) // DEBUG
+                    //console.log(&#34;Next async task&#34;, request.responseText) // DEBUG
                     eval(request.responseText)
+                    //console.log(&#34;Done&#34;)
+                    setTimeout(evalBrowser, 1);
                 }
                 catch(e) {
-                    //console.log(&#34;ERROR&#34;, e.message) // DEBUG
-                    setTimeout(function(){sendErrorToServer(request.responseText, e.message);}, 1);
-                    setTimeout(evalBrowser, 10);
+                    console.log(&#34;ERROR&#34;, e.message) // DEBUG
+                    setTimeout(function(){sendErrorToServer(request.responseText, e.message); evalBrowser();}, 1);
                 }
             }
         }
@@ -177,8 +177,9 @@ JSCRIPT = b&#34;&#34;&#34;
         var value
         var error = &#34;&#34;
         try {
-            //console.log(query, expression) // DEBUG
+            //console.log(&#34;Evaluate&#34;, query, expression) // DEBUG
             value = eval(expression)
+            //console.log(&#34;Result&#34;, value)
         }
         catch (e) {
             value = 0
@@ -298,6 +299,7 @@ class ClientContext:
         self._error = None
         self._signal = None
         self.obj.js = JSroot(self)
+        self.singleThread = False
 
     def render(self, html):
         # for Django support
@@ -428,8 +430,9 @@ class ClientContext:
             self.log_message(&#34;NEXT TASK REQUESTED IS JS %s&#34;, script)
             return script
         elif task == &#34;error&#34;:
+            # return &#39;&#39;
+            self._error = RuntimeError(req[&#39;error&#39;] + &#34;: &#34; + req[&#34;expr&#34;])
             return &#39;&#39;
-            # raise RuntimeError(req[&#39;error&#39;] + &#34;: &#34; + req[&#34;expr&#34;])
         elif task == &#34;unload&#34;:
             self.addEndTask()
             HtmlPage.expire(pageid)
@@ -474,7 +477,7 @@ class ClientContext:
                 self.log_message(&#34;ADD TASK %s ON %d&#34;, stmt, id(self.tasks))
                 return
             time.sleep(0.1)
-        self._error = TimeoutError(&#34;Timeout inserting task: &#34; + stmt)
+        self._error = TimeoutError(&#34;Timeout (deadlock?) inserting task: &#34; + stmt)
 
 
     def run(self, function, args, block=True):
@@ -955,7 +958,7 @@ class JSchain:
             self.execExpression()
         except Exception as ex:
             self.state._error = ex
-            self.state._server.log_error(&#34;Uncatchable exception: %s&#34;, str(ex))
+            self.state.log_error(&#34;Uncatchable exception: %s&#34;, str(ex))
             raise ex
 
     def execExpression(self):
@@ -963,18 +966,18 @@ class JSchain:
         if self.keep:
             stmt = self._statement()
             # print(&#34;EXEC&#34;, stmt)
-            if self.state.lock.locked():
-                # print(&#34;ASYNC&#34;, stmt)
-                # running within a query, so just run it async
-                self._addTask(stmt)
+            if self.state.singleThread:
+                # print(&#34;ASYNC0&#34;, stmt)
+                # can&#39;t run multiple queries, so just run it async
+                self.state.addTask(stmt)
             else:
                 # otherwise, wait for evaluation
                 # print(&#34;SYNC&#34;, stmt)
                 try:
                     self.eval()
-                except Exception as ex:
+                finally:
                     self.keep = False
-                    raise ex
+
             # mark it as evaluated
             self.keep = False
 
@@ -1022,28 +1025,34 @@ class JSchain:
 
         c = self.state
 
-        if c.lock.locked():
-            c.log_error(&#34;App is active so you cannot manipulate JS for: %s&#34; % stmt)
-            raise RuntimeError(&#34;App is active so you cannot manipulate JS for: %s&#34; % stmt)
-
-        idx, q = c.addQuery()
-        data = json.dumps(stmt)
-        cmd = &#34;sendFromBrowserToServer({}, {})&#34;.format(data, idx)
-        c.addTask(cmd)
-        try:
-            c.log_message(&#34;WAITING ON RESULT QUEUE&#34;)
-            result = q.get(timeout=timeout)
-            c.delQuery(idx)
-        except queue.Empty:
-            # self.state._server.log_message(&#34;TIMEOUT waiting on: %s&#34;, stmt)
-            raise TimeoutError(&#34;Timout waiting on: %s&#34; % stmt)
-        if result[&#34;error&#34;] != &#34;&#34;:
-            # self.state._server.log_error(&#34;ERROR EVAL %s : %s&#34;, result[&#34;error&#34;], stmt)
-            raise RuntimeError(result[&#34;error&#34;] + &#34;: &#34; + stmt)
-        if &#34;value&#34; in result:
-            return result[&#34;value&#34;]
-        else:
+        if not c.lock.acquire(blocking = False):
+            c.log_error(&#34;App is active so you cannot wait for result of JS: %s&#34; % stmt)
+            c.addTask(stmt)
             return 0
+            # raise RuntimeError(&#34;App is active so you cannot evaluate JS for: %s&#34; % stmt)
+
+        try:
+            idx, q = c.addQuery()
+            data = json.dumps(stmt)
+            cmd = &#34;sendFromBrowserToServer({}, {})&#34;.format(data, idx)
+            c.addTask(cmd)
+            try:
+                c.log_message(&#34;WAITING ON RESULT QUEUE&#34;)
+                result = q.get(timeout=timeout)
+                c.log_message(&#34;RESULT QUEUE %s&#34;, result)
+                c.delQuery(idx)
+            except queue.Empty:
+                c.log_message(&#34;TIMEOUT waiting on: %s&#34;, stmt)
+                raise TimeoutError(&#34;Timout waiting on: %s&#34; % stmt)
+            if result[&#34;error&#34;] != &#34;&#34;:
+                c.log_error(&#34;ERROR EVAL %s : %s&#34;, result[&#34;error&#34;], stmt)
+                raise RuntimeError(result[&#34;error&#34;] + &#34;: &#34; + stmt)
+            if &#34;value&#34; in result:
+                return result[&#34;value&#34;]
+            else:
+                return 0
+        finally:
+            c.lock.release()
 
     #
     # Magic methods. We create these methods for force the
@@ -1297,6 +1306,7 @@ class JSroot:
         self._error = None
         self._signal = None
         self.obj.js = JSroot(self)
+        self.singleThread = False
 
     def render(self, html):
         # for Django support
@@ -1427,8 +1437,9 @@ class JSroot:
             self.log_message(&#34;NEXT TASK REQUESTED IS JS %s&#34;, script)
             return script
         elif task == &#34;error&#34;:
+            # return &#39;&#39;
+            self._error = RuntimeError(req[&#39;error&#39;] + &#34;: &#34; + req[&#34;expr&#34;])
             return &#39;&#39;
-            # raise RuntimeError(req[&#39;error&#39;] + &#34;: &#34; + req[&#34;expr&#34;])
         elif task == &#34;unload&#34;:
             self.addEndTask()
             HtmlPage.expire(pageid)
@@ -1473,7 +1484,7 @@ class JSroot:
                 self.log_message(&#34;ADD TASK %s ON %d&#34;, stmt, id(self.tasks))
                 return
             time.sleep(0.1)
-        self._error = TimeoutError(&#34;Timeout inserting task: &#34; + stmt)
+        self._error = TimeoutError(&#34;Timeout (deadlock?) inserting task: &#34; + stmt)
 
 
     def run(self, function, args, block=True):
@@ -1734,7 +1745,7 @@ affect responsiveness.</p></div>
             self.log_message(&#34;ADD TASK %s ON %d&#34;, stmt, id(self.tasks))
             return
         time.sleep(0.1)
-    self._error = TimeoutError(&#34;Timeout inserting task: &#34; + stmt)</code></pre>
+    self._error = TimeoutError(&#34;Timeout (deadlock?) inserting task: &#34; + stmt)</code></pre>
 </details>
 </dd>
 <dt id="jyserver.ClientContext.callMethod"><code class="name flex">
@@ -2016,8 +2027,9 @@ a response. This function returns the Queue for the given session id and query.<
         self.log_message(&#34;NEXT TASK REQUESTED IS JS %s&#34;, script)
         return script
     elif task == &#34;error&#34;:
+        # return &#39;&#39;
+        self._error = RuntimeError(req[&#39;error&#39;] + &#34;: &#34; + req[&#34;expr&#34;])
         return &#39;&#39;
-        # raise RuntimeError(req[&#39;error&#39;] + &#34;: &#34; + req[&#34;expr&#34;])
     elif task == &#34;unload&#34;:
         self.addEndTask()
         HtmlPage.expire(pageid)
@@ -2695,7 +2707,7 @@ js.document.getElementById(&quot;txt&quot;).value
             self.execExpression()
         except Exception as ex:
             self.state._error = ex
-            self.state._server.log_error(&#34;Uncatchable exception: %s&#34;, str(ex))
+            self.state.log_error(&#34;Uncatchable exception: %s&#34;, str(ex))
             raise ex
 
     def execExpression(self):
@@ -2703,18 +2715,18 @@ js.document.getElementById(&quot;txt&quot;).value
         if self.keep:
             stmt = self._statement()
             # print(&#34;EXEC&#34;, stmt)
-            if self.state.lock.locked():
-                # print(&#34;ASYNC&#34;, stmt)
-                # running within a query, so just run it async
-                self._addTask(stmt)
+            if self.state.singleThread:
+                # print(&#34;ASYNC0&#34;, stmt)
+                # can&#39;t run multiple queries, so just run it async
+                self.state.addTask(stmt)
             else:
                 # otherwise, wait for evaluation
                 # print(&#34;SYNC&#34;, stmt)
                 try:
                     self.eval()
-                except Exception as ex:
+                finally:
                     self.keep = False
-                    raise ex
+
             # mark it as evaluated
             self.keep = False
 
@@ -2762,28 +2774,34 @@ js.document.getElementById(&quot;txt&quot;).value
 
         c = self.state
 
-        if c.lock.locked():
-            c.log_error(&#34;App is active so you cannot manipulate JS for: %s&#34; % stmt)
-            raise RuntimeError(&#34;App is active so you cannot manipulate JS for: %s&#34; % stmt)
-
-        idx, q = c.addQuery()
-        data = json.dumps(stmt)
-        cmd = &#34;sendFromBrowserToServer({}, {})&#34;.format(data, idx)
-        c.addTask(cmd)
-        try:
-            c.log_message(&#34;WAITING ON RESULT QUEUE&#34;)
-            result = q.get(timeout=timeout)
-            c.delQuery(idx)
-        except queue.Empty:
-            # self.state._server.log_message(&#34;TIMEOUT waiting on: %s&#34;, stmt)
-            raise TimeoutError(&#34;Timout waiting on: %s&#34; % stmt)
-        if result[&#34;error&#34;] != &#34;&#34;:
-            # self.state._server.log_error(&#34;ERROR EVAL %s : %s&#34;, result[&#34;error&#34;], stmt)
-            raise RuntimeError(result[&#34;error&#34;] + &#34;: &#34; + stmt)
-        if &#34;value&#34; in result:
-            return result[&#34;value&#34;]
-        else:
+        if not c.lock.acquire(blocking = False):
+            c.log_error(&#34;App is active so you cannot wait for result of JS: %s&#34; % stmt)
+            c.addTask(stmt)
             return 0
+            # raise RuntimeError(&#34;App is active so you cannot evaluate JS for: %s&#34; % stmt)
+
+        try:
+            idx, q = c.addQuery()
+            data = json.dumps(stmt)
+            cmd = &#34;sendFromBrowserToServer({}, {})&#34;.format(data, idx)
+            c.addTask(cmd)
+            try:
+                c.log_message(&#34;WAITING ON RESULT QUEUE&#34;)
+                result = q.get(timeout=timeout)
+                c.log_message(&#34;RESULT QUEUE %s&#34;, result)
+                c.delQuery(idx)
+            except queue.Empty:
+                c.log_message(&#34;TIMEOUT waiting on: %s&#34;, stmt)
+                raise TimeoutError(&#34;Timout waiting on: %s&#34; % stmt)
+            if result[&#34;error&#34;] != &#34;&#34;:
+                c.log_error(&#34;ERROR EVAL %s : %s&#34;, result[&#34;error&#34;], stmt)
+                raise RuntimeError(result[&#34;error&#34;] + &#34;: &#34; + stmt)
+            if &#34;value&#34; in result:
+                return result[&#34;value&#34;]
+            else:
+                return 0
+        finally:
+            c.lock.release()
 
     #
     # Magic methods. We create these methods for force the
@@ -2945,28 +2963,34 @@ assignment.</p>
 
     c = self.state
 
-    if c.lock.locked():
-        c.log_error(&#34;App is active so you cannot manipulate JS for: %s&#34; % stmt)
-        raise RuntimeError(&#34;App is active so you cannot manipulate JS for: %s&#34; % stmt)
+    if not c.lock.acquire(blocking = False):
+        c.log_error(&#34;App is active so you cannot wait for result of JS: %s&#34; % stmt)
+        c.addTask(stmt)
+        return 0
+        # raise RuntimeError(&#34;App is active so you cannot evaluate JS for: %s&#34; % stmt)
 
-    idx, q = c.addQuery()
-    data = json.dumps(stmt)
-    cmd = &#34;sendFromBrowserToServer({}, {})&#34;.format(data, idx)
-    c.addTask(cmd)
     try:
-        c.log_message(&#34;WAITING ON RESULT QUEUE&#34;)
-        result = q.get(timeout=timeout)
-        c.delQuery(idx)
-    except queue.Empty:
-        # self.state._server.log_message(&#34;TIMEOUT waiting on: %s&#34;, stmt)
-        raise TimeoutError(&#34;Timout waiting on: %s&#34; % stmt)
-    if result[&#34;error&#34;] != &#34;&#34;:
-        # self.state._server.log_error(&#34;ERROR EVAL %s : %s&#34;, result[&#34;error&#34;], stmt)
-        raise RuntimeError(result[&#34;error&#34;] + &#34;: &#34; + stmt)
-    if &#34;value&#34; in result:
-        return result[&#34;value&#34;]
-    else:
-        return 0</code></pre>
+        idx, q = c.addQuery()
+        data = json.dumps(stmt)
+        cmd = &#34;sendFromBrowserToServer({}, {})&#34;.format(data, idx)
+        c.addTask(cmd)
+        try:
+            c.log_message(&#34;WAITING ON RESULT QUEUE&#34;)
+            result = q.get(timeout=timeout)
+            c.log_message(&#34;RESULT QUEUE %s&#34;, result)
+            c.delQuery(idx)
+        except queue.Empty:
+            c.log_message(&#34;TIMEOUT waiting on: %s&#34;, stmt)
+            raise TimeoutError(&#34;Timout waiting on: %s&#34; % stmt)
+        if result[&#34;error&#34;] != &#34;&#34;:
+            c.log_error(&#34;ERROR EVAL %s : %s&#34;, result[&#34;error&#34;], stmt)
+            raise RuntimeError(result[&#34;error&#34;] + &#34;: &#34; + stmt)
+        if &#34;value&#34; in result:
+            return result[&#34;value&#34;]
+        else:
+            return 0
+    finally:
+        c.lock.release()</code></pre>
 </details>
 </dd>
 <dt id="jyserver.JSchain.evalAsync"><code class="name flex">
@@ -3000,18 +3024,18 @@ assignment.</p>
     if self.keep:
         stmt = self._statement()
         # print(&#34;EXEC&#34;, stmt)
-        if self.state.lock.locked():
-            # print(&#34;ASYNC&#34;, stmt)
-            # running within a query, so just run it async
-            self._addTask(stmt)
+        if self.state.singleThread:
+            # print(&#34;ASYNC0&#34;, stmt)
+            # can&#39;t run multiple queries, so just run it async
+            self.state.addTask(stmt)
         else:
             # otherwise, wait for evaluation
             # print(&#34;SYNC&#34;, stmt)
             try:
                 self.eval()
-            except Exception as ex:
+            finally:
                 self.keep = False
-                raise ex
+
         # mark it as evaluated
         self.keep = False</code></pre>
 </details>
@@ -3257,7 +3281,7 @@ js.document.getElementById(&quot;txt&quot;).value = 25
 <h1>Index</h1>
 <div class="toc">
 <ul>
-<li><a href="#self-contained-example">Self-contained example:</a></li>
+<li><a href="#example-using-bottle">Example using Bottle</a></li>
 </ul>
 </div>
 <ul id="index">
