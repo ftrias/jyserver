@@ -240,12 +240,18 @@ class ClientContext:
         self.singleThread = False
 
     def render(self, html):
-        # for Django support
+        '''
+        Add Javascript to the given html that will enable use of this
+        module. If using Django, this gets reassigned to `render_django()`.
+        '''
         page = HtmlPage(html=html)
         html = page.html(self.uid)
         return html
 
     def render_django(self, inp):
+        '''
+        Version of `render()` for use with Django.
+        '''
         # for Django support
         page = HtmlPage(html=inp.content)
         inp.content = page.html(self.uid)
@@ -280,6 +286,10 @@ class ClientContext:
         return self.obj.__getattribute__(attr)
 
     def getJS(self):
+        '''
+        Return the JS object tied to this context. Use the return value to
+        create JS statements.
+        '''
         return self.obj.js
 
     @classmethod
@@ -319,6 +329,11 @@ class ClientContext:
         raise ValueError("Invalid or empty seession id: %s" % uid)
 
     def processCommand(self, req):
+        '''
+        Process the /_process_srv0 requests. All client requests are directed to this
+        URL and the framework is responsible for calling this function to process
+        them.
+        '''
         pageid = req["session"]
         if pageid in HtmlPage.pageMap:
             self.uid = HtmlPage.pageMap[pageid]
@@ -511,6 +526,10 @@ class ClientContext:
         self.tasks.put(None)
 
     def mainRun(self):
+        '''
+        If there is a method called `main` in the client app, then run it in its own
+        thread.
+        '''
         if hasattr(self.obj, "main"):
             server_thread = threading.Thread(
                 target=self.mainRunThread, daemon=True)
@@ -557,6 +576,10 @@ class ClientContext:
         self._signal = None
 
     def run_callable(self, f, args):
+        '''
+        Execute a callable (function, etc) and catch any exceptions. This
+        is called when running pages asynchonously.
+        '''
         params = signature(f).parameters
         try:
             if len(params) == 0:
@@ -627,10 +650,17 @@ class HtmlPage:
         self.pageid = uuid.uuid1().hex
 
     def alive(self):
+        '''
+        See if the current page is in the active page list and has not been
+        expired.
+        '''
         return self.pageid in self.pageActive
 
     @classmethod
     def expire(cls, item=None):
+        '''
+        Expire objects in the page cache.
+        '''
         if item:
             del cls.pageActive[item]
             del cls.pageMap[item]

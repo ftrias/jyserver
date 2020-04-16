@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
 <meta name="generator" content="pdoc 0.8.0" />
 <title>jyserver.Flask API documentation</title>
-<meta name="description" content="" />
+<meta name="description" content="Module for using jyserver in Flask. This module provides to new
+decorators …" />
 <link href='https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.0/normalize.min.css' rel='stylesheet'>
 <link href='https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/8.0.0/sanitize.min.css' rel='stylesheet'>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css" rel="stylesheet">
@@ -20,22 +21,119 @@
 <h1 class="title">Module <code>jyserver.Flask</code></h1>
 </header>
 <section id="section-intro">
+<p>Module for using jyserver in Flask. This module provides to new
+decorators.</p>
+<h2 id="decorators">Decorators</h2>
+<ul>
+<li>
+<p>@use</p>
+<p>Link an application object to the Flask app</p>
+</li>
+<li>
+<p>@task</p>
+<p>Helper that wraps a function inside a separate thread so that
+it can execute concurrently.</p>
+</li>
+</ul>
+<h2 id="example">Example</h2>
+<pre><code class="html">&lt;p id=&quot;time&quot;&gt;TIME&lt;/p&gt;
+&lt;button id=&quot;reset&quot; onclick=&quot;server.reset()&quot;&gt;Reset&lt;/button&gt;
+</code></pre>
+<p>```python
+import jyserver.Flask as js
+import time
+from flask import Flask, render_template, request</p>
+<p>app = Flask(<strong>name</strong>)</p>
+<p>@js.use(app)
+class App():
+def reset(self):
+self.start0 = time.time()
+self.js.dom.time.innerHTML = "{:.1f}".format(0)</p>
+<pre><code>@js.task
+def main(self):
+    self.start0 = time.time()
+    while True:
+        t = "{:.1f}".format(time.time() - self.start0)
+        self.js.dom.time.innerHTML = t
+        time.sleep(0.1)
+</code></pre>
+<p>@app.route('/')
+def index_page(name=None):
+App.main()
+return App.render(render_template('flask-simple.html')</p>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">from flask import Flask, request
+<pre><code class="python">&#39;&#39;&#39;
+Module for using jyserver in Flask. This module provides to new
+decorators.
+
+Decorators
+-----------
+
+* @use
+
+    Link an application object to the Flask app
+
+* @task
+
+    Helper that wraps a function inside a separate thread so that
+    it can execute concurrently.
+
+Example
+-------------
+```html
+&lt;p id=&#34;time&#34;&gt;TIME&lt;/p&gt;
+&lt;button id=&#34;reset&#34; onclick=&#34;server.reset()&#34;&gt;Reset&lt;/button&gt;
+```
+
+```python
+import jyserver.Flask as js
+import time
+from flask import Flask, render_template, request
+
+app = Flask(__name__)
+
+@js.use(app)
+class App():
+    def reset(self):
+        self.start0 = time.time()
+        self.js.dom.time.innerHTML = &#34;{:.1f}&#34;.format(0)
+
+    @js.task
+    def main(self):
+        self.start0 = time.time()
+        while True:
+            t = &#34;{:.1f}&#34;.format(time.time() - self.start0)
+            self.js.dom.time.innerHTML = t
+            time.sleep(0.1)
+
+@app.route(&#39;/&#39;)
+def index_page(name=None):
+    App.main()
+    return App.render(render_template(&#39;flask-simple.html&#39;)
+&#39;&#39;&#39;
+
+from flask import Flask, request
 import json
 import jyserver
 import threading
 
 def task(func):
+    &#39;&#39;&#39;
+    Decorator wraps the function in a separate thread for concurrent
+    execution.
+    &#39;&#39;&#39;
     def wrapper(*args):
         server_thread = threading.Thread(target=func, args=args, daemon=True)
         server_thread.start()
     return wrapper
 
 def use(flaskapp):
+    &#39;&#39;&#39;
+    Link a class to an app object. Pass Flask&#39;s `app` object.
+    &#39;&#39;&#39;
     def decorator(appClass):
         global context
         context = jyserver.ClientContext(appClass)
@@ -66,12 +164,17 @@ def use(flaskapp):
 <span>def <span class="ident">task</span></span>(<span>func)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Decorator wraps the function in a separate thread for concurrent
+execution.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def task(func):
+    &#39;&#39;&#39;
+    Decorator wraps the function in a separate thread for concurrent
+    execution.
+    &#39;&#39;&#39;
     def wrapper(*args):
         server_thread = threading.Thread(target=func, args=args, daemon=True)
         server_thread.start()
@@ -82,12 +185,15 @@ def use(flaskapp):
 <span>def <span class="ident">use</span></span>(<span>flaskapp)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Link a class to an app object. Pass Flask's <code>app</code> object.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def use(flaskapp):
+    &#39;&#39;&#39;
+    Link a class to an app object. Pass Flask&#39;s `app` object.
+    &#39;&#39;&#39;
     def decorator(appClass):
         global context
         context = jyserver.ClientContext(appClass)
@@ -115,7 +221,10 @@ def use(flaskapp):
 <nav id="sidebar">
 <h1>Index</h1>
 <div class="toc">
-<ul></ul>
+<ul>
+<li><a href="#decorators">Decorators</a></li>
+<li><a href="#example">Example</a></li>
+</ul>
 </div>
 <ul id="index">
 <li><h3>Super-module</h3>

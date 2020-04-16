@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
 <meta name="generator" content="pdoc 0.8.0" />
 <title>jyserver.Server API documentation</title>
-<meta name="description" content="" />
+<meta name="description" content="Module for using jyserver standalone. This module uses the built-in
+http.server module. It serves as a framework for integration into
+other servers …" />
 <link href='https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.0/normalize.min.css' rel='stylesheet'>
 <link href='https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/8.0.0/sanitize.min.css' rel='stylesheet'>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css" rel="stylesheet">
@@ -20,11 +22,73 @@
 <h1 class="title">Module <code>jyserver.Server</code></h1>
 </header>
 <section id="section-intro">
+<p>Module for using jyserver standalone. This module uses the built-in
+http.server module. It serves as a framework for integration into
+other servers.</p>
+<h2 id="example">Example</h2>
+<pre><code class="python">from jserver import Client, Server
+class App(Client):
+    def __init__(self):
+        self.html = &quot;&quot;&quot;
+            &lt;p id=&quot;time&quot;&gt;TIME&lt;/p&gt;
+            &lt;button id=&quot;reset&quot; 
+                onclick=&quot;server.reset()&quot;&gt;Reset&lt;/button&gt;
+        &quot;&quot;&quot;
+
+    def reset(self):
+        self.start0 = time.time()
+        self.js.dom.time.innerHTML = &quot;{:.1f}&quot;.format(0)
+
+    def main(self):
+        self.start0 = time.time()
+        while True:
+            t = &quot;{:.1f}&quot;.format(time.time() - self.start0)
+            self.js.dom.time.innerHTML = t
+            time.sleep(0.1)
+
+httpd = Server(App)
+print(&quot;serving at port&quot;, httpd.port)
+httpd.start()
+</code></pre>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">from socketserver import ThreadingTCPServer
+<pre><code class="python">&#39;&#39;&#39;
+Module for using jyserver standalone. This module uses the built-in
+http.server module. It serves as a framework for integration into
+other servers.
+
+Example
+-------------
+```python
+from jserver import Client, Server
+class App(Client):
+    def __init__(self):
+        self.html = &#34;&#34;&#34;
+            &lt;p id=&#34;time&#34;&gt;TIME&lt;/p&gt;
+            &lt;button id=&#34;reset&#34; 
+                onclick=&#34;server.reset()&#34;&gt;Reset&lt;/button&gt;
+        &#34;&#34;&#34;
+
+    def reset(self):
+        self.start0 = time.time()
+        self.js.dom.time.innerHTML = &#34;{:.1f}&#34;.format(0)
+
+    def main(self):
+        self.start0 = time.time()
+        while True:
+            t = &#34;{:.1f}&#34;.format(time.time() - self.start0)
+            self.js.dom.time.innerHTML = t
+            time.sleep(0.1)
+
+httpd = Server(App)
+print(&#34;serving at port&#34;, httpd.port)
+httpd.start()
+```
+&#39;&#39;&#39;
+
+from socketserver import ThreadingTCPServer
 from http.server import SimpleHTTPRequestHandler
 from http.cookies import SimpleCookie
 from urllib.parse import urlparse, parse_qsl, unquote
@@ -1087,7 +1151,9 @@ and each tab will be it's own session.</dd>
 <nav id="sidebar">
 <h1>Index</h1>
 <div class="toc">
-<ul></ul>
+<ul>
+<li><a href="#example">Example</a></li>
+</ul>
 </div>
 <ul id="index">
 <li><h3>Super-module</h3>

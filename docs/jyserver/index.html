@@ -302,12 +302,18 @@ class ClientContext:
         self.singleThread = False
 
     def render(self, html):
-        # for Django support
+        &#39;&#39;&#39;
+        Add Javascript to the given html that will enable use of this
+        module. If using Django, this gets reassigned to `render_django()`.
+        &#39;&#39;&#39;
         page = HtmlPage(html=html)
         html = page.html(self.uid)
         return html
 
     def render_django(self, inp):
+        &#39;&#39;&#39;
+        Version of `render()` for use with Django.
+        &#39;&#39;&#39;
         # for Django support
         page = HtmlPage(html=inp.content)
         inp.content = page.html(self.uid)
@@ -342,6 +348,10 @@ class ClientContext:
         return self.obj.__getattribute__(attr)
 
     def getJS(self):
+        &#39;&#39;&#39;
+        Return the JS object tied to this context. Use the return value to
+        create JS statements.
+        &#39;&#39;&#39;
         return self.obj.js
 
     @classmethod
@@ -381,6 +391,11 @@ class ClientContext:
         raise ValueError(&#34;Invalid or empty seession id: %s&#34; % uid)
 
     def processCommand(self, req):
+        &#39;&#39;&#39;
+        Process the /_process_srv0 requests. All client requests are directed to this
+        URL and the framework is responsible for calling this function to process
+        them.
+        &#39;&#39;&#39;
         pageid = req[&#34;session&#34;]
         if pageid in HtmlPage.pageMap:
             self.uid = HtmlPage.pageMap[pageid]
@@ -573,6 +588,10 @@ class ClientContext:
         self.tasks.put(None)
 
     def mainRun(self):
+        &#39;&#39;&#39;
+        If there is a method called `main` in the client app, then run it in its own
+        thread.
+        &#39;&#39;&#39;
         if hasattr(self.obj, &#34;main&#34;):
             server_thread = threading.Thread(
                 target=self.mainRunThread, daemon=True)
@@ -619,6 +638,10 @@ class ClientContext:
         self._signal = None
 
     def run_callable(self, f, args):
+        &#39;&#39;&#39;
+        Execute a callable (function, etc) and catch any exceptions. This
+        is called when running pages asynchonously.
+        &#39;&#39;&#39;
         params = signature(f).parameters
         try:
             if len(params) == 0:
@@ -689,10 +712,17 @@ class HtmlPage:
         self.pageid = uuid.uuid1().hex
 
     def alive(self):
+        &#39;&#39;&#39;
+        See if the current page is in the active page list and has not been
+        expired.
+        &#39;&#39;&#39;
         return self.pageid in self.pageActive
 
     @classmethod
     def expire(cls, item=None):
+        &#39;&#39;&#39;
+        Expire objects in the page cache.
+        &#39;&#39;&#39;
         if item:
             del cls.pageActive[item]
             del cls.pageMap[item]
@@ -1257,19 +1287,24 @@ class JSroot:
 <dl>
 <dt><code class="name"><a title="jyserver.Bottle" href="Bottle.html">jyserver.Bottle</a></code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Module for using jyserver in Bottle. This module provides to new
+decorators …</p></div>
 </dd>
 <dt><code class="name"><a title="jyserver.Django" href="Django.html">jyserver.Django</a></code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Module for using jyserver in Django. This module provides to new
+decorators …</p></div>
 </dd>
 <dt><code class="name"><a title="jyserver.Flask" href="Flask.html">jyserver.Flask</a></code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Module for using jyserver in Flask. This module provides to new
+decorators …</p></div>
 </dd>
 <dt><code class="name"><a title="jyserver.Server" href="Server.html">jyserver.Server</a></code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Module for using jyserver standalone. This module uses the built-in
+http.server module. It serves as a framework for integration into
+other servers …</p></div>
 </dd>
 </dl>
 </section>
@@ -1309,12 +1344,18 @@ class JSroot:
         self.singleThread = False
 
     def render(self, html):
-        # for Django support
+        &#39;&#39;&#39;
+        Add Javascript to the given html that will enable use of this
+        module. If using Django, this gets reassigned to `render_django()`.
+        &#39;&#39;&#39;
         page = HtmlPage(html=html)
         html = page.html(self.uid)
         return html
 
     def render_django(self, inp):
+        &#39;&#39;&#39;
+        Version of `render()` for use with Django.
+        &#39;&#39;&#39;
         # for Django support
         page = HtmlPage(html=inp.content)
         inp.content = page.html(self.uid)
@@ -1349,6 +1390,10 @@ class JSroot:
         return self.obj.__getattribute__(attr)
 
     def getJS(self):
+        &#39;&#39;&#39;
+        Return the JS object tied to this context. Use the return value to
+        create JS statements.
+        &#39;&#39;&#39;
         return self.obj.js
 
     @classmethod
@@ -1388,6 +1433,11 @@ class JSroot:
         raise ValueError(&#34;Invalid or empty seession id: %s&#34; % uid)
 
     def processCommand(self, req):
+        &#39;&#39;&#39;
+        Process the /_process_srv0 requests. All client requests are directed to this
+        URL and the framework is responsible for calling this function to process
+        them.
+        &#39;&#39;&#39;
         pageid = req[&#34;session&#34;]
         if pageid in HtmlPage.pageMap:
             self.uid = HtmlPage.pageMap[pageid]
@@ -1580,6 +1630,10 @@ class JSroot:
         self.tasks.put(None)
 
     def mainRun(self):
+        &#39;&#39;&#39;
+        If there is a method called `main` in the client app, then run it in its own
+        thread.
+        &#39;&#39;&#39;
         if hasattr(self.obj, &#34;main&#34;):
             server_thread = threading.Thread(
                 target=self.mainRunThread, daemon=True)
@@ -1626,6 +1680,10 @@ class JSroot:
         self._signal = None
 
     def run_callable(self, f, args):
+        &#39;&#39;&#39;
+        Execute a callable (function, etc) and catch any exceptions. This
+        is called when running pages asynchonously.
+        &#39;&#39;&#39;
         params = signature(f).parameters
         try:
             if len(params) == 0:
@@ -1826,12 +1884,17 @@ return a string with the error message.</p></div>
 <span>def <span class="ident">getJS</span></span>(<span>self)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Return the JS object tied to this context. Use the return value to
+create JS statements.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def getJS(self):
+    &#39;&#39;&#39;
+    Return the JS object tied to this context. Use the return value to
+    create JS statements.
+    &#39;&#39;&#39;
     return self.obj.js</code></pre>
 </details>
 </dd>
@@ -1937,12 +2000,17 @@ a response. This function returns the Queue for the given session id and query.<
 <span>def <span class="ident">mainRun</span></span>(<span>self)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>If there is a method called <code>main</code> in the client app, then run it in its own
+thread.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def mainRun(self):
+    &#39;&#39;&#39;
+    If there is a method called `main` in the client app, then run it in its own
+    thread.
+    &#39;&#39;&#39;
     if hasattr(self.obj, &#34;main&#34;):
         server_thread = threading.Thread(
             target=self.mainRunThread, daemon=True)
@@ -1972,12 +2040,19 @@ a response. This function returns the Queue for the given session id and query.<
 <span>def <span class="ident">processCommand</span></span>(<span>self, req)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Process the /_process_srv0 requests. All client requests are directed to this
+URL and the framework is responsible for calling this function to process
+them.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def processCommand(self, req):
+    &#39;&#39;&#39;
+    Process the /_process_srv0 requests. All client requests are directed to this
+    URL and the framework is responsible for calling this function to process
+    them.
+    &#39;&#39;&#39;
     pageid = req[&#34;session&#34;]
     if pageid in HtmlPage.pageMap:
         self.uid = HtmlPage.pageMap[pageid]
@@ -2042,13 +2117,17 @@ a response. This function returns the Queue for the given session id and query.<
 <span>def <span class="ident">render</span></span>(<span>self, html)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Add Javascript to the given html that will enable use of this
+module. If using Django, this gets reassigned to <code>render_django()</code>.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def render(self, html):
-    # for Django support
+    &#39;&#39;&#39;
+    Add Javascript to the given html that will enable use of this
+    module. If using Django, this gets reassigned to `render_django()`.
+    &#39;&#39;&#39;
     page = HtmlPage(html=html)
     html = page.html(self.uid)
     return html</code></pre>
@@ -2058,12 +2137,15 @@ a response. This function returns the Queue for the given session id and query.<
 <span>def <span class="ident">render_django</span></span>(<span>self, inp)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Version of <code>render()</code> for use with Django.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def render_django(self, inp):
+    &#39;&#39;&#39;
+    Version of `render()` for use with Django.
+    &#39;&#39;&#39;
     # for Django support
     page = HtmlPage(html=inp.content)
     inp.content = page.html(self.uid)
@@ -2130,12 +2212,17 @@ return a string with the error message.</p></div>
 <span>def <span class="ident">run_callable</span></span>(<span>self, f, args)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Execute a callable (function, etc) and catch any exceptions. This
+is called when running pages asynchonously.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def run_callable(self, f, args):
+    &#39;&#39;&#39;
+    Execute a callable (function, etc) and catch any exceptions. This
+    is called when running pages asynchonously.
+    &#39;&#39;&#39;
     params = signature(f).parameters
     try:
         if len(params) == 0:
@@ -2286,10 +2373,17 @@ execute it and return the results. If not, it will return "not found", status 40
         self.pageid = uuid.uuid1().hex
 
     def alive(self):
+        &#39;&#39;&#39;
+        See if the current page is in the active page list and has not been
+        expired.
+        &#39;&#39;&#39;
         return self.pageid in self.pageActive
 
     @classmethod
     def expire(cls, item=None):
+        &#39;&#39;&#39;
+        Expire objects in the page cache.
+        &#39;&#39;&#39;
         if item:
             del cls.pageActive[item]
             del cls.pageMap[item]
@@ -2359,13 +2453,16 @@ execute it and return the results. If not, it will return "not found", status 40
 <span>def <span class="ident">expire</span></span>(<span>item=None)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>Expire objects in the page cache.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">@classmethod
 def expire(cls, item=None):
+    &#39;&#39;&#39;
+    Expire objects in the page cache.
+    &#39;&#39;&#39;
     if item:
         del cls.pageActive[item]
         del cls.pageMap[item]
@@ -2387,12 +2484,17 @@ def expire(cls, item=None):
 <span>def <span class="ident">alive</span></span>(<span>self)</span>
 </code></dt>
 <dd>
-<div class="desc"></div>
+<div class="desc"><p>See if the current page is in the active page list and has not been
+expired.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">def alive(self):
+    &#39;&#39;&#39;
+    See if the current page is in the active page list and has not been
+    expired.
+    &#39;&#39;&#39;
     return self.pageid in self.pageActive</code></pre>
 </details>
 </dd>

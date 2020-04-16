@@ -6,17 +6,19 @@ the server using Python syntax. It also provides access to the Python code from
 the browser's Javascript. It can be used stand-alone or with other
 frameworks such as Flask, Django, etc.
 
-jyserver uses Python dynamic syntax evaluation so that you can write
+jyserver uses Python's dynamic syntax evaluation so that you can write
 Python code that will dynamically be converted to JS and executed on the
 browser. On the browser end, it uses JS's dynamic Proxy object to rewrite JS
 code for execution by the server. All of this is done transparently without any
-additional libraries or code. See example below.
+additional libraries or code. See examples below.
 
 Documentation: [Class documentation](https://ftrias.github.io/jyserver/)
 
+Git (and examples): [github:ftrias/jyserver](https://github.com/ftrias/jyserver)
+
 Tutorial: [Dev.to article](https://dev.to/ftrias/simple-kiosk-framework-in-python-2ane)
 
-Tutorial Flask: [Dev.to Flask article](https://dev.to/ftrias/access-js-dom-from-flask-app-using-jyserver-23h9)
+Tutorial Flask/Bottle: [Dev.to Flask article](https://dev.to/ftrias/access-js-dom-from-flask-app-using-jyserver-23h9)
 
 ## Standalone Example:
 
@@ -118,7 +120,7 @@ def hello_world(request):
     return App.render(render(request, 'hello_world.html', {}))
 ```
 
-In your `urls.py` add this path:
+In `urls.py` add this path:
 
 ```python
 from jyserver.Django import process
@@ -166,7 +168,7 @@ run(host='localhost', port=8080)
 ## Internals
 
 How does this work? In the standalone example, the process is below. 
-Flask is identical except for the httpd server.
+Flask/Bottle/Django is identical except for the httpd server.
 
 1. The server will listen for new http requests.
 

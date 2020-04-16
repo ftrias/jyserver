@@ -1,3 +1,37 @@
+'''
+Module for using jyserver standalone. This module uses the built-in
+http.server module. It serves as a framework for integration into
+other servers.
+
+Example
+-------------
+```python
+from jserver import Client, Server
+class App(Client):
+    def __init__(self):
+        self.html = """
+            <p id="time">TIME</p>
+            <button id="reset" 
+                onclick="server.reset()">Reset</button>
+        """
+
+    def reset(self):
+        self.start0 = time.time()
+        self.js.dom.time.innerHTML = "{:.1f}".format(0)
+
+    def main(self):
+        self.start0 = time.time()
+        while True:
+            t = "{:.1f}".format(time.time() - self.start0)
+            self.js.dom.time.innerHTML = t
+            time.sleep(0.1)
+
+httpd = Server(App)
+print("serving at port", httpd.port)
+httpd.start()
+```
+'''
+
 from socketserver import ThreadingTCPServer
 from http.server import SimpleHTTPRequestHandler
 from http.cookies import SimpleCookie
