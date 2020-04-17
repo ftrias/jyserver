@@ -1,3 +1,5 @@
+all: jyserver/jyserver-min.js html wheel
+
 init:
 	pip install -r requirements.txt
 
@@ -22,4 +24,6 @@ html: docs
 	# pdoc --html --html-dir docs --all-submodules jyserver
 	pdoc3 --html -o docs --force jyserver
 
-.PHONY: init test
+# use https://developers.google.com/closure/compiler/docs/gettingstarted_app
+jyserver/jyserver-min.js: jyserver/jyserver.js
+	java -jar scratch/closure-compiler-v20200406.jar --js $< --js_output_file $@

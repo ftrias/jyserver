@@ -115,174 +115,8 @@ import re
 import time
 import uuid
 
-#
-# This is the Javascript code that gets injected into the HTML
-# page.
-#
-# server            Proxy class for asynchronous execution of commands
-#                   on the server. This class does not return a value.
-#
-# app               Proxy class that for synchronous exection. Will
-#                   return a value. However, if used while a page
-#                   update is in progress, it will fail.
-#
-# Other functions used internally:
-#
-# evalBrowser()     Queries the server for any pending commands. If
-#                   there are no pending commands, the connection
-#                   is kept open by the server until a pending
-#                   command is issued, or a timeout. At the end of
-#                   the query, the function gets scheduled for execution
-#                   again. We schedule it instead of calling so we
-#                   don&#39;t overflow the stack.
-#
-# sendFromBrowserToServer(e, q) 
-#                   Evaluate expression `e` and then send the results
-#                   to the server. This is used by the server to
-#                   resolve Javascript statements.
-#
-# sendErrorToServer(e)
-#                   Send a client expcetion to the server for error
-#                   handling.
-#
-# closeBrowserWindow()
-#                   Called when a page is terminated so server can
-#                   stop processing it.
-#
-JSCRIPT = b&#34;&#34;&#34;
-    if (typeof UID === &#34;undefined&#34;) { UID = &#34;COOKIE&#34;; }
-    if (typeof PAGEID === &#34;undefined&#34;) { PAGEID = &#34;COOKIE&#34;; }
-    function evalBrowser() {
-        var request = new XMLHttpRequest();
-        request.onreadystatechange = function() {
-            if (request.readyState==4 &amp;&amp; request.status==200){
-                try {
-                    //console.log(&#34;Next async task&#34;, request.responseText) // DEBUG
-                    eval(request.responseText)
-                    //console.log(&#34;Done&#34;)
-                    setTimeout(evalBrowser, 1);
-                }
-                catch(e) {
-                    console.log(&#34;ERROR&#34;, e.message) // DEBUG
-                    setTimeout(function(){sendErrorToServer(request.responseText, e.message); evalBrowser();}, 1);
-                }
-            }
-        }
-        request.open(&#34;POST&#34;, &#34;/_process_srv0&#34;);
-        request.setRequestHeader(&#34;Content-Type&#34;, &#34;application/json;charset=UTF-8&#34;);
-        request.send(JSON.stringify({&#34;session&#34;: PAGEID, &#34;task&#34;:&#34;next&#34;}));
-        //console.log(&#34;Query next commands&#34;) // DEBUG
-    }
-    function sendFromBrowserToServer(expression, query) {
-        var value
-        var error = &#34;&#34;
-        try {
-            //console.log(&#34;Evaluate&#34;, query, expression) // DEBUG
-            value = eval(expression)
-            //console.log(&#34;Result&#34;, value)
-        }
-        catch (e) {
-            value = 0
-            error = e.message + &#34;: &#39;&#34; + expression + &#34;&#39;&#34;
-            console.log(&#34;ERROR&#34;, query, error)
-        }
-        var request = new XMLHttpRequest();
-        request.open(&#34;POST&#34;, &#34;/_process_srv0&#34;);
-        request.setRequestHeader(&#34;Content-Type&#34;, &#34;application/json;charset=UTF-8&#34;);
-        request.send(JSON.stringify({&#34;session&#34;:PAGEID, &#34;task&#34;:&#34;state&#34;, &#34;value&#34;:value, &#34;query&#34;:query, &#34;error&#34;: error}));
-        //console.log(&#34;response&#34;,value) // DEBUG
-    }
-    function sendErrorToServer(expr, e) {
-        var request = new XMLHttpRequest();
-        request.open(&#34;POST&#34;, &#34;/_process_srv0&#34;);
-        request.setRequestHeader(&#34;Content-Type&#34;, &#34;application/json;charset=UTF-8&#34;);
-        request.send(JSON.stringify( {&#34;session&#34;:PAGEID, &#34;task&#34;:&#34;error&#34;, &#34;error&#34;:e, &#34;expr&#34;:expr} ));
-    }
-    function closeBrowserWindow() {
-        var request = new XMLHttpRequest();
-        request.open(&#34;POST&#34;, &#34;/_process_srv0&#34;);
-        request.setRequestHeader(&#34;Content-Type&#34;, &#34;application/json;charset=UTF-8&#34;);
-        request.send(JSON.stringify({&#34;session&#34;:PAGEID, &#34;task&#34;:&#34;unload&#34;}));
-    }
-    server = new Proxy({}, { 
-        get : function(target, property) { 
-            return function(...args) {
-                var request = new XMLHttpRequest();
-                request.onreadystatechange = function() {
-                    if (request.readyState==4 &amp;&amp; request.status==200){
-                        result = JSON.parse(request.responseText)
-                        if (&#34;error&#34; in result) {
-                            console.log(&#34;ERROR async: &#34;, property, request.responseText)
-                            throw result[&#34;error&#34;]
-                        }
-                    }
-                }
-                request.open(&#34;POST&#34;, &#34;/_process_srv0&#34;);
-                request.setRequestHeader(&#34;Content-Type&#34;, &#34;application/json;charset=UTF-8&#34;);
-                request.send(JSON.stringify({&#34;session&#34;:PAGEID, &#34;task&#34;:&#34;async&#34;, &#34;function&#34;:property, &#34;args&#34;:args}));
-                //console.log(&#34;send asynch&#34;,property,args) // DEBUG
-            }            
-        }
-    });
-    function handleApp(property, args) { 
-        var request = new XMLHttpRequest();
-        request.open(&#34;POST&#34;, &#34;/_process_srv0&#34;, false);
-        request.setRequestHeader(&#34;Content-Type&#34;, &#34;application/json;charset=UTF-8&#34;);
-        request.send(JSON.stringify({&#34;session&#34;:PAGEID, &#34;task&#34;:&#34;run&#34;, &#34;block&#34;:true, &#34;function&#34;:property, &#34;args&#34;:args}));
-        if (request.status === 200) {
-            var result = JSON.parse(request.responseText)
-            if (&#34;error&#34; in result) {
-                console.log(&#34;ERROR&#34;, result[&#34;error&#34;]);
-                throw result[&#34;error&#34;];
-                return null;
-            }
-            if (result[&#34;type&#34;] == &#34;expression&#34;) {
-                return eval(result[&#34;expression&#34;])
-            }
-            else {
-                return result[&#34;value&#34;]
-            }
-        }
-    }
-    function handleAppProperty(property) { 
-        var request = new XMLHttpRequest();
-        request.open(&#34;POST&#34;, &#34;/_process_srv0&#34;, false);
-        request.setRequestHeader(&#34;Content-Type&#34;, &#34;application/json;charset=UTF-8&#34;);
-        request.send(JSON.stringify({&#34;session&#34;:PAGEID, &#34;task&#34;:&#34;get&#34;, &#34;block&#34;:true, &#34;expression&#34;:property}));
-        if (request.status === 200) {
-            var result = JSON.parse(request.responseText)
-            if (&#34;error&#34; in result) {
-                console.log(&#34;ERROR&#34;, result[&#34;error&#34;]);
-                throw result[&#34;error&#34;];
-                return null;
-            }
-            if (result[&#34;type&#34;] == &#34;expression&#34;) {
-                return eval(result[&#34;expression&#34;])
-            }
-            else {
-                return result[&#34;value&#34;]
-            }
-        }
-    }
-    function handleAppSetProperty(property, value) { 
-        var request = new XMLHttpRequest();
-        request.open(&#34;POST&#34;, &#34;/_process_srv0&#34;, false);
-        request.setRequestHeader(&#34;Content-Type&#34;, &#34;application/json;charset=UTF-8&#34;);
-        request.send(JSON.stringify({&#34;session&#34;:PAGEID, &#34;task&#34;:&#34;set&#34;, &#34;property&#34;:property, &#34;value&#34;:value}));
-        return value
-    }
-    app = new Proxy({}, { 
-        get : function(target, prop) { 
-            return handleAppProperty(prop)
-        },
-        set : function(target, prop, value) { 
-            return handleAppSetProperty(prop, value)
-        }
-    });
-    window.addEventListener(&#34;beforeunload&#34;, function(event) { closeBrowserWindow(); });
-    window.addEventListener(&#34;load&#34;, function(event) { evalBrowser(); });
-&#34;&#34;&#34;
-    
+from . import jscript
+
 class ClientContext:
     contextMap = {}
     taskTimeout = 5
@@ -687,7 +521,7 @@ class ClientContext:
 class HtmlPage:
     # Patterns for matching HTML to figure out where to inject the javascript code
     _pscript = re.compile(
-        b&#39;\\&lt;script.*\\s+src\\s*=\\s*&#34;appscript.js&#34;&#39;)
+        b&#39;\\&lt;script.*\\s+src\\s*=\\s*&#34;jyserver.js&#34;&#39;)
     _plist = [re.compile(b&#39;\\{\\{JSCRIPT\\}\\}&#39;, re.IGNORECASE),
         re.compile(b&#39;\\&lt;script\\&gt;&#39;, re.IGNORECASE),
         re.compile(b&#39;\\&lt;\\/head\\&gt;&#39;, re.IGNORECASE),
@@ -746,8 +580,8 @@ class HtmlPage:
     def insertJS(self, uid, html):
         &#39;&#39;&#39;
         Insert the Javascript library into HTML. The strategy is that it will look for patterns
-        to figure out where to insert. If &#34;&lt;script src=&#34;appjscript.js&#34;&gt;&#34; is found, it will not
-        make changes and will return the Javascript when the browser requests the appjscript.js
+        to figure out where to insert. If &#34;&lt;script src=&#34;jyscript.js&#34;&gt;&#34; is found, it will not
+        make changes and will return the Javascript when the browser requests the jyscript.js
         file. Otherwise, it will insert it into a &lt;script&gt; section, the &lt;head&gt; or at the start
         of the HTML. In any case, this function will insert the global variable UID containing
         the session id.
@@ -766,14 +600,14 @@ class HtmlPage:
             if m:
                 sx, ex = m.span()
                 if i == 0:
-                    return html[:sx] + U + JSCRIPT + html[ex:]
+                    return html[:sx] + U + jscript.JSCRIPT + html[ex:]
                 elif i == 1:
-                    return html[:sx] + b&#34;&lt;script&gt;&#34; + U + JSCRIPT + b&#34;&lt;/script&gt;&#34; + html[sx:]
+                    return html[:sx] + b&#34;&lt;script&gt;&#34; + U + jscript.JSCRIPT + b&#34;&lt;/script&gt;&#34; + html[sx:]
                 elif i == 2:
-                    return html[:sx] + b&#34;&lt;script&gt;&#34; + U + JSCRIPT + b&#34;&lt;/script&gt;&#34; + html[sx:]
+                    return html[:sx] + b&#34;&lt;script&gt;&#34; + U + jscript.JSCRIPT + b&#34;&lt;/script&gt;&#34; + html[sx:]
                 else:
-                    return html[:sx] + b&#34;&lt;head&gt;&lt;script&gt;&#34; + U + JSCRIPT + b&#34;&lt;/script&gt;&lt;/head&gt;&#34; + html
-        return b&#34;&lt;head&gt;&lt;script&gt;&#34; + U + JSCRIPT + b&#34;&lt;/script&gt;&lt;/head&gt;&#34; + html
+                    return html[:sx] + b&#34;&lt;head&gt;&lt;script&gt;&#34; + U + jscript.JSCRIPT + b&#34;&lt;/script&gt;&lt;/head&gt;&#34; + html
+        return b&#34;&lt;head&gt;&lt;script&gt;&#34; + U + jscript.JSCRIPT + b&#34;&lt;/script&gt;&lt;/head&gt;&#34; + html
 
 class JSchain:
     &#39;&#39;&#39;
@@ -1305,6 +1139,10 @@ decorators …</p></div>
 <div class="desc"><p>Module for using jyserver standalone. This module uses the built-in
 http.server module. It serves as a framework for integration into
 other servers …</p></div>
+</dd>
+<dt><code class="name"><a title="jyserver.jscript" href="jscript.html">jyserver.jscript</a></code></dt>
+<dd>
+<div class="desc"></div>
 </dd>
 </dl>
 </section>
@@ -2348,7 +2186,7 @@ execute it and return the results. If not, it will return "not found", status 40
 <pre><code class="python">class HtmlPage:
     # Patterns for matching HTML to figure out where to inject the javascript code
     _pscript = re.compile(
-        b&#39;\\&lt;script.*\\s+src\\s*=\\s*&#34;appscript.js&#34;&#39;)
+        b&#39;\\&lt;script.*\\s+src\\s*=\\s*&#34;jyserver.js&#34;&#39;)
     _plist = [re.compile(b&#39;\\{\\{JSCRIPT\\}\\}&#39;, re.IGNORECASE),
         re.compile(b&#39;\\&lt;script\\&gt;&#39;, re.IGNORECASE),
         re.compile(b&#39;\\&lt;\\/head\\&gt;&#39;, re.IGNORECASE),
@@ -2407,8 +2245,8 @@ execute it and return the results. If not, it will return "not found", status 40
     def insertJS(self, uid, html):
         &#39;&#39;&#39;
         Insert the Javascript library into HTML. The strategy is that it will look for patterns
-        to figure out where to insert. If &#34;&lt;script src=&#34;appjscript.js&#34;&gt;&#34; is found, it will not
-        make changes and will return the Javascript when the browser requests the appjscript.js
+        to figure out where to insert. If &#34;&lt;script src=&#34;jyscript.js&#34;&gt;&#34; is found, it will not
+        make changes and will return the Javascript when the browser requests the jyscript.js
         file. Otherwise, it will insert it into a &lt;script&gt; section, the &lt;head&gt; or at the start
         of the HTML. In any case, this function will insert the global variable UID containing
         the session id.
@@ -2427,14 +2265,14 @@ execute it and return the results. If not, it will return "not found", status 40
             if m:
                 sx, ex = m.span()
                 if i == 0:
-                    return html[:sx] + U + JSCRIPT + html[ex:]
+                    return html[:sx] + U + jscript.JSCRIPT + html[ex:]
                 elif i == 1:
-                    return html[:sx] + b&#34;&lt;script&gt;&#34; + U + JSCRIPT + b&#34;&lt;/script&gt;&#34; + html[sx:]
+                    return html[:sx] + b&#34;&lt;script&gt;&#34; + U + jscript.JSCRIPT + b&#34;&lt;/script&gt;&#34; + html[sx:]
                 elif i == 2:
-                    return html[:sx] + b&#34;&lt;script&gt;&#34; + U + JSCRIPT + b&#34;&lt;/script&gt;&#34; + html[sx:]
+                    return html[:sx] + b&#34;&lt;script&gt;&#34; + U + jscript.JSCRIPT + b&#34;&lt;/script&gt;&#34; + html[sx:]
                 else:
-                    return html[:sx] + b&#34;&lt;head&gt;&lt;script&gt;&#34; + U + JSCRIPT + b&#34;&lt;/script&gt;&lt;/head&gt;&#34; + html
-        return b&#34;&lt;head&gt;&lt;script&gt;&#34; + U + JSCRIPT + b&#34;&lt;/script&gt;&lt;/head&gt;&#34; + html</code></pre>
+                    return html[:sx] + b&#34;&lt;head&gt;&lt;script&gt;&#34; + U + jscript.JSCRIPT + b&#34;&lt;/script&gt;&lt;/head&gt;&#34; + html
+        return b&#34;&lt;head&gt;&lt;script&gt;&#34; + U + jscript.JSCRIPT + b&#34;&lt;/script&gt;&lt;/head&gt;&#34; + html</code></pre>
 </details>
 <h3>Class variables</h3>
 <dl>
@@ -2521,8 +2359,8 @@ HTML for the uid given.</p></div>
 </code></dt>
 <dd>
 <div class="desc"><p>Insert the Javascript library into HTML. The strategy is that it will look for patterns
-to figure out where to insert. If "<script src="appjscript.js">" is found, it will not
-make changes and will return the Javascript when the browser requests the appjscript.js
+to figure out where to insert. If "<script src="jyscript.js">" is found, it will not
+make changes and will return the Javascript when the browser requests the jyscript.js
 file. Otherwise, it will insert it into a <script> section, the <head> or at the start
 of the HTML. In any case, this function will insert the global variable UID containing
 the session id.</p></div>
@@ -2533,8 +2371,8 @@ the session id.</p></div>
 <pre><code class="python">def insertJS(self, uid, html):
     &#39;&#39;&#39;
     Insert the Javascript library into HTML. The strategy is that it will look for patterns
-    to figure out where to insert. If &#34;&lt;script src=&#34;appjscript.js&#34;&gt;&#34; is found, it will not
-    make changes and will return the Javascript when the browser requests the appjscript.js
+    to figure out where to insert. If &#34;&lt;script src=&#34;jyscript.js&#34;&gt;&#34; is found, it will not
+    make changes and will return the Javascript when the browser requests the jyscript.js
     file. Otherwise, it will insert it into a &lt;script&gt; section, the &lt;head&gt; or at the start
     of the HTML. In any case, this function will insert the global variable UID containing
     the session id.
@@ -2553,14 +2391,14 @@ the session id.</p></div>
         if m:
             sx, ex = m.span()
             if i == 0:
-                return html[:sx] + U + JSCRIPT + html[ex:]
+                return html[:sx] + U + jscript.JSCRIPT + html[ex:]
             elif i == 1:
-                return html[:sx] + b&#34;&lt;script&gt;&#34; + U + JSCRIPT + b&#34;&lt;/script&gt;&#34; + html[sx:]
+                return html[:sx] + b&#34;&lt;script&gt;&#34; + U + jscript.JSCRIPT + b&#34;&lt;/script&gt;&#34; + html[sx:]
             elif i == 2:
-                return html[:sx] + b&#34;&lt;script&gt;&#34; + U + JSCRIPT + b&#34;&lt;/script&gt;&#34; + html[sx:]
+                return html[:sx] + b&#34;&lt;script&gt;&#34; + U + jscript.JSCRIPT + b&#34;&lt;/script&gt;&#34; + html[sx:]
             else:
-                return html[:sx] + b&#34;&lt;head&gt;&lt;script&gt;&#34; + U + JSCRIPT + b&#34;&lt;/script&gt;&lt;/head&gt;&#34; + html
-    return b&#34;&lt;head&gt;&lt;script&gt;&#34; + U + JSCRIPT + b&#34;&lt;/script&gt;&lt;/head&gt;&#34; + html</code></pre>
+                return html[:sx] + b&#34;&lt;head&gt;&lt;script&gt;&#34; + U + jscript.JSCRIPT + b&#34;&lt;/script&gt;&lt;/head&gt;&#34; + html
+    return b&#34;&lt;head&gt;&lt;script&gt;&#34; + U + jscript.JSCRIPT + b&#34;&lt;/script&gt;&lt;/head&gt;&#34; + html</code></pre>
 </details>
 </dd>
 </dl>
@@ -3393,6 +3231,7 @@ js.document.getElementById(&quot;txt&quot;).value = 25
 <li><code><a title="jyserver.Django" href="Django.html">jyserver.Django</a></code></li>
 <li><code><a title="jyserver.Flask" href="Flask.html">jyserver.Flask</a></code></li>
 <li><code><a title="jyserver.Server" href="Server.html">jyserver.Server</a></code></li>
+<li><code><a title="jyserver.jscript" href="jscript.html">jyserver.jscript</a></code></li>
 </ul>
 </li>
 <li><h3><a href="#header-classes">Classes</a></h3>
