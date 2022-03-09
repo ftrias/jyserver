@@ -91,7 +91,7 @@ class App():
 @app.route('/')
 def index_page(name=None):
     App.main()
-    return App.render(render_template('flask-simple.html')
+    return App.render(render_template('flask-simple.html'))
 ```
 
 ## Django example
