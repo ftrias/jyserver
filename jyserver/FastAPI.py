@@ -16,11 +16,6 @@ Decorators
 
 Example
 -------------
-```html
-<p id="time">TIME</p>
-<button id="reset" onclick="server.reset()">Reset</button>
-```
-
 ```python
 import jyserver.FastAPI as js
 import time
