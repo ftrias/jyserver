@@ -1,5 +1,5 @@
 '''
-Module for using jyserver in Bottle. This module provides to new
+Module for using jyserver in Bottle. This module provides two new
 decorators.
 
 Decorators

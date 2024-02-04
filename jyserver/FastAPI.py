@@ -1,5 +1,5 @@
 '''
-Module for using jyserver in FastAPI. This module provides to new
+Module for using jyserver in FastAPI. This module provides two new
 decorators.
 
 Decorators
