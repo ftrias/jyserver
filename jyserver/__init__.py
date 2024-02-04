@@ -57,11 +57,10 @@ from . import jscript
 
 class AppParent:
     def __getitem__(self, k):
-        return self.js.dom.__getattr__(k)
+        return self.js.dom.__getattr__(k).innerHTML
 
     def __setitem__(self, k, v):
-        item = self.js.dom.__getattr__(k)
-        item.innerHTML = v
+        self.js.dom.__getattr__(k).innerHTML = v
 
     def __getattr__(self, k):
         return self.js.dom.__getattr__(k)
