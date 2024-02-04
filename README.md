@@ -45,7 +45,7 @@ class App(Client):
         # reset counter so elapsed time is 0
         self.start0 = time.time()
         # executed on client
-        self.js.dom.time.innerHTML = "{:.1f}".format(0)
+        self.time.innerHTML = "{:.1f}".format(0)
 
     # If there is a "main" function, it gets executed. Program
     # ends when the function ends. If there is no main, then
@@ -57,7 +57,7 @@ class App(Client):
             # get current elapsed time, rounded to 0.1 seconds
             t = "{:.1f}".format(time.time() - self.start0)
             # update the DOM on the client
-            self.js.dom.time.innerHTML = t
+            self.time..innerHTML = t
             time.sleep(0.1)
 
 httpd = Server(App)
@@ -83,14 +83,14 @@ app = Flask(__name__)
 class App():
     def reset(self):
         self.start0 = time.time()
-        self.js.dom.time.innerHTML = "{:.1f}".format(0)
+        self.time.innerHTML = "{:.1f}".format(0)
 
     @js.task
     def main(self):
         self.start0 = time.time()
         while True:
             t = "{:.1f}".format(time.time() - self.start0)
-            self.js.dom.time.innerHTML = t
+            self.time.innerHTML = t
             time.sleep(0.1)
 
 @app.route('/')
@@ -114,14 +114,14 @@ app = FastAPI(__name__)
 class App():
     def reset(self):
         self.start0 = time.time()
-        self.js.dom.time.innerHTML = "{:.1f}".format(0)
+        self.time.innerHTML = "{:.1f}".format(0)
 
     @js.task
     def main(self):
         self.start0 = time.time()
         while True:
             t = "{:.1f}".format(time.time() - self.start0)
-            self.js.dom.time.innerHTML = t
+            self.time.innerHTML = t
             time.sleep(0.1)
 
 @app.get('/', response_class=HTMLResponse)
@@ -145,14 +145,14 @@ import time
 class App():
     def reset(self):
         self.start0 = time.time()
-        self.js.dom.time.innerHTML = "{:.1f}".format(0)
+        self.time.innerHTML = "{:.1f}".format(0)
 
     @js.task
     def main(self):
         self.start0 = time.time()
         while True:
             t = "{:.1f}".format(time.time() - self.start0)
-            self.js.dom.time.innerHTML = t
+            self.time.innerHTML = t
             time.sleep(0.1)
 
 def hello_world(request):

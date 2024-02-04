@@ -55,6 +55,17 @@ import uuid
 
 from . import jscript
 
+class AppParent:
+    def __getitem__(self, k):
+        return self.js.dom.__getattr__(k)
+
+    def __setitem__(self, k, v):
+        item = self.js.dom.__getattr__(k)
+        item.innerHTML = v
+
+    def __getattr__(self, k):
+        return self.js.dom.__getattr__(k)
+
 class ClientContext:
     contextMap = {}
     taskTimeout = 5
@@ -62,6 +73,9 @@ class ClientContext:
     def __init__(self, cls, uid=None, verbose=False):
         self.appClass = cls
         self.obj = cls()
+        cls.__getitem__ = AppParent.__getitem__
+        cls.__setitem__ = AppParent.__setitem__
+        cls.__getattr__ = AppParent.__getattr__
         self.queries = {}
         self.lock = threading.Lock()
         self.fxn = {}
