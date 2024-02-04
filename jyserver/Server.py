@@ -37,7 +37,7 @@ from http.server import SimpleHTTPRequestHandler
 from http.cookies import SimpleCookie
 from urllib.parse import urlparse, parse_qsl, unquote
 
-from jyserver import ClientContext
+from jyserver import ClientContext, HtmlPage
 
 import json
 import threading
@@ -276,7 +276,10 @@ class Handler(SimpleHTTPRequestHandler):
         self.server.log_message("GET %s %s", qry, req)
         if "session" in req:
             pageid = req["session"]
-            self.uid = HtmlPage.pageMap[pageid]
+            if pageid in HtmlPage.pageMap:
+                self.uid = HtmlPage.pageMap[pageid]
+            else:
+                self.uid = None
         else:
             self.uid = None
             # self.setNewUID()
@@ -308,7 +311,15 @@ class Handler(SimpleHTTPRequestHandler):
         self.log_message("HTTP POST %s", data)
         if self.path == "/_process_srv0":
             self.log_message("PROCESS %s", data)
-            req = json.loads(data)  
+            req = json.loads(data)
+            if "session" in req:
+                pageid = req["session"]
+                if pageid in HtmlPage.pageMap:
+                    self.uid = HtmlPage.pageMap[pageid]
+                else:
+                    self.uid = None
+            else:
+                self.uid = None  
             c = self.getContext()
             results = c.processCommand(req)
             self.reply(results)
