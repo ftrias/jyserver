@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
 <meta name="generator" content="pdoc 0.10.0" />
-<title>jyserver.Django API documentation</title>
-<meta name="description" content="Module for using jyserver in Django. This module provides to new
+<title>jyserver.FastAPI API documentation</title>
+<meta name="description" content="Module for using jyserver in FastAPI. This module provides to new
 decorators …" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
@@ -20,16 +20,16 @@ decorators …" />
 <main>
 <article id="content">
 <header>
-<h1 class="title">Module <code>jyserver.Django</code></h1>
+<h1 class="title">Module <code>jyserver.FastAPI</code></h1>
 </header>
 <section id="section-intro">
-<p>Module for using jyserver in Django. This module provides to new
+<p>Module for using jyserver in FastAPI. This module provides to new
 decorators.</p>
 <h2 id="decorators">Decorators</h2>
 <ul>
 <li>
 <p>@use</p>
-<p>Link an application object to the Django app</p>
+<p>Link an application object to the Flask app</p>
 </li>
 <li>
 <p>@task</p>
@@ -37,40 +37,44 @@ decorators.</p>
 it can execute concurrently.</p>
 </li>
 </ul>
-<h2 id="example-assumes-working-setup">Example (assumes working setup)</h2>
-<pre><code class="language-python">from django.shortcuts import render
-import jyserver.Django as js
-import time
-
-@js.use
+<h2 id="example">Example</h2>
+<pre><code class="language-html">&lt;p id=&quot;time&quot;&gt;TIME&lt;/p&gt;
+&lt;button id=&quot;reset&quot; onclick=&quot;server.reset()&quot;&gt;Reset&lt;/button&gt;
+</code></pre>
+<p>```python
+import jyserver.FastAPI as js
+import time</p>
+<p>from fastapi import FastAPI
+from fastapi.responses import HTMLResponse</p>
+<p>app = FastAPI(<strong>name</strong>)</p>
+<p>@js.use(app)
 class App():
-    def reset(self):
-        self.start0 = time.time()
-        self.js.dom.time.innerHTML = &quot;{:.1f}&quot;.format(0)
-
-    @js.task
-    def main(self):
-        self.start0 = time.time()
-        while True:
-            t = &quot;{:.1f}&quot;.format(time.time() - self.start0)
-            self.js.dom.time.innerHTML = t
-            time.sleep(0.1)
-
-def hello_world(request):
-    App.main()
-    return App.render(render(request, 'hello_world.html', {}))
+def reset(self):
+self.start0 = time.time()
+self.js.dom.time.innerHTML = "{:.1f}".format(0)</p>
+<pre><code>@js.task
+def main(self):
+    self.start0 = time.time()
+    while True:
+        t = "{:.1f}".format(time.time() - self.start0)
+        self.js.dom.time.innerHTML = t
+        time.sleep(0.1)
 </code></pre>
-<p>In <code>urls.py</code> add this path:</p>
-<pre><code class="language-python">from jyserver.Django import process
-...
-    url(r'^_process_srv0$', process, name='process'),
-</code></pre>
+<p>@app.get('/', response_class=HTMLResponse)
+async def index_page():
+App.main()
+html =
+"""</p>
+<p id="time">TIME</p>
+<p><button id="reset" onclick="server.reset()">Reset</button>
+"""
+return App.render(html)</p>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">&#39;&#39;&#39;
-Module for using jyserver in Django. This module provides to new
+Module for using jyserver in FastAPI. This module provides to new
 decorators.
 
 Decorators
@@ -78,21 +82,30 @@ Decorators
 
 * @use
 
-    Link an application object to the Django app
+    Link an application object to the Flask app
 
 * @task
 
     Helper that wraps a function inside a separate thread so that
     it can execute concurrently.
 
-Example (assumes working setup)
+Example
 -------------
+```html
+&lt;p id=&#34;time&#34;&gt;TIME&lt;/p&gt;
+&lt;button id=&#34;reset&#34; onclick=&#34;server.reset()&#34;&gt;Reset&lt;/button&gt;
+```
+
 ```python
-from django.shortcuts import render
-import jyserver.Django as js
+import jyserver.FastAPI as js
 import time
 
-@js.use
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+
+app = FastAPI(__name__)
+
+@js.use(app)
 class App():
     def reset(self):
         self.start0 = time.time()
@@ -106,25 +119,20 @@ class App():
             self.js.dom.time.innerHTML = t
             time.sleep(0.1)
 
-def hello_world(request):
+@app.get(&#39;/&#39;, response_class=HTMLResponse)
+async def index_page():
     App.main()
-    return App.render(render(request, &#39;hello_world.html&#39;, {}))
-```
-
-In `urls.py` add this path:
-
-```python
-from jyserver.Django import process
-...
-    url(r&#39;^_process_srv0$&#39;, process, name=&#39;process&#39;),
-```
+    html =  &#34;&#34;&#34;
+&lt;p id=&#34;time&#34;&gt;TIME&lt;/p&gt;
+&lt;button id=&#34;reset&#34; onclick=&#34;server.reset()&#34;&gt;Reset&lt;/button&gt;
+&#34;&#34;&#34;
+    return App.render(html)
 &#39;&#39;&#39;
 
-from django.shortcuts import render
-from django.http import HttpResponse
-from django.views.decorators.csrf import csrf_exempt
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
 
-import json
 import jyserver
 import threading
 
@@ -138,32 +146,23 @@ def task(func):
         server_thread.start()
     return wrapper
 
-@csrf_exempt
-def process(request):
+def use(myapp):
     &#39;&#39;&#39;
-    Used to process browser requests. Must be added to your `urls.py`
-    to process `/_process_srv0` as in:
-    ```
-        url(r&#39;^_process_srv0$&#39;, process, name=&#39;process&#39;),
-    ```
+    Link a class to an app object. Pass `app` object.
     &#39;&#39;&#39;
-    if request.method == &#39;POST&#39;:
-        req = json.loads(request.body)
-        result = context.processCommand(req)
-        if result is None:
-            return HttpResponse(&#39;&#39;)
-        return HttpResponse(result)
-    else:
-        return HttpResponse(&#34;GET reqeust not allowed&#34;)
+    def decorator(appClass):
+        global context
+        context = jyserver.ClientContext(appClass)
 
-def use(appClass):
-    &#39;&#39;&#39;
-    Link a class to an app object. Pass Flask&#39;s `app` object.
-    &#39;&#39;&#39;
-    global context
-    context = jyserver.ClientContext(appClass)
-    context.render = context.render_django
-    return context</code></pre>
+        @myapp.post(&#39;/_process_srv0&#39;)
+        async def process(item: Request):
+            req = await item.json()
+            result = context.processCommand(req)
+            if result is None: result = &#39;&#39;
+            return Response(content=result, media_type=&#34;text/plain&#34;)
+        return context
+
+    return decorator</code></pre>
 </details>
 </section>
 <section>
@@ -173,38 +172,7 @@ def use(appClass):
 <section>
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
-<dt id="jyserver.Django.process"><code class="name flex">
-<span>def <span class="ident">process</span></span>(<span>request)</span>
-</code></dt>
-<dd>
-<div class="desc"><p>Used to process browser requests. Must be added to your <code>urls.py</code>
-to process <code>/_process_srv0</code> as in:</p>
-<pre><code>    url(r'^_process_srv0$', process, name='process'),
-</code></pre></div>
-<details class="source">
-<summary>
-<span>Expand source code</span>
-</summary>
-<pre><code class="python">@csrf_exempt
-def process(request):
-    &#39;&#39;&#39;
-    Used to process browser requests. Must be added to your `urls.py`
-    to process `/_process_srv0` as in:
-    ```
-        url(r&#39;^_process_srv0$&#39;, process, name=&#39;process&#39;),
-    ```
-    &#39;&#39;&#39;
-    if request.method == &#39;POST&#39;:
-        req = json.loads(request.body)
-        result = context.processCommand(req)
-        if result is None:
-            return HttpResponse(&#39;&#39;)
-        return HttpResponse(result)
-    else:
-        return HttpResponse(&#34;GET reqeust not allowed&#34;)</code></pre>
-</details>
-</dd>
-<dt id="jyserver.Django.task"><code class="name flex">
+<dt id="jyserver.FastAPI.task"><code class="name flex">
 <span>def <span class="ident">task</span></span>(<span>func)</span>
 </code></dt>
 <dd>
@@ -225,23 +193,32 @@ execution.</p></div>
     return wrapper</code></pre>
 </details>
 </dd>
-<dt id="jyserver.Django.use"><code class="name flex">
-<span>def <span class="ident">use</span></span>(<span>appClass)</span>
+<dt id="jyserver.FastAPI.use"><code class="name flex">
+<span>def <span class="ident">use</span></span>(<span>myapp)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Link a class to an app object. Pass Flask's <code>app</code> object.</p></div>
+<div class="desc"><p>Link a class to an app object. Pass <code>app</code> object.</p></div>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def use(appClass):
+<pre><code class="python">def use(myapp):
     &#39;&#39;&#39;
-    Link a class to an app object. Pass Flask&#39;s `app` object.
+    Link a class to an app object. Pass `app` object.
     &#39;&#39;&#39;
-    global context
-    context = jyserver.ClientContext(appClass)
-    context.render = context.render_django
-    return context</code></pre>
+    def decorator(appClass):
+        global context
+        context = jyserver.ClientContext(appClass)
+
+        @myapp.post(&#39;/_process_srv0&#39;)
+        async def process(item: Request):
+            req = await item.json()
+            result = context.processCommand(req)
+            if result is None: result = &#39;&#39;
+            return Response(content=result, media_type=&#34;text/plain&#34;)
+        return context
+
+    return decorator</code></pre>
 </details>
 </dd>
 </dl>
@@ -254,7 +231,7 @@ execution.</p></div>
 <div class="toc">
 <ul>
 <li><a href="#decorators">Decorators</a></li>
-<li><a href="#example-assumes-working-setup">Example (assumes working setup)</a></li>
+<li><a href="#example">Example</a></li>
 </ul>
 </div>
 <ul id="index">
@@ -265,9 +242,8 @@ execution.</p></div>
 </li>
 <li><h3><a href="#header-functions">Functions</a></h3>
 <ul class="">
-<li><code><a title="jyserver.Django.process" href="#jyserver.Django.process">process</a></code></li>
-<li><code><a title="jyserver.Django.task" href="#jyserver.Django.task">task</a></code></li>
-<li><code><a title="jyserver.Django.use" href="#jyserver.Django.use">use</a></code></li>
+<li><code><a title="jyserver.FastAPI.task" href="#jyserver.FastAPI.task">task</a></code></li>
+<li><code><a title="jyserver.FastAPI.use" href="#jyserver.FastAPI.use">use</a></code></li>
 </ul>
 </li>
 </ul>
