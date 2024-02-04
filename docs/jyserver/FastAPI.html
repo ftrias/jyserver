@@ -41,34 +41,37 @@ it can execute concurrently.</p>
 <pre><code class="language-html">&lt;p id=&quot;time&quot;&gt;TIME&lt;/p&gt;
 &lt;button id=&quot;reset&quot; onclick=&quot;server.reset()&quot;&gt;Reset&lt;/button&gt;
 </code></pre>
-<p>```python
-import jyserver.FastAPI as js
-import time</p>
-<p>from fastapi import FastAPI
-from fastapi.responses import HTMLResponse</p>
-<p>app = FastAPI(<strong>name</strong>)</p>
-<p>@js.use(app)
+<pre><code class="language-python">import jyserver.FastAPI as js
+import time
+
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+
+app = FastAPI(__name__)
+
+@js.use(app)
 class App():
-def reset(self):
-self.start0 = time.time()
-self.js.dom.time.innerHTML = "{:.1f}".format(0)</p>
-<pre><code>@js.task
-def main(self):
-    self.start0 = time.time()
-    while True:
-        t = "{:.1f}".format(time.time() - self.start0)
-        self.js.dom.time.innerHTML = t
-        time.sleep(0.1)
-</code></pre>
-<p>@app.get('/', response_class=HTMLResponse)
+    def reset(self):
+        self.start0 = time.time()
+        self.js.dom.time.innerHTML = &quot;{:.1f}&quot;.format(0)
+
+    @js.task
+    def main(self):
+        self.start0 = time.time()
+        while True:
+            t = &quot;{:.1f}&quot;.format(time.time() - self.start0)
+            self.js.dom.time.innerHTML = t
+            time.sleep(0.1)
+
+@app.get('/', response_class=HTMLResponse)
 async def index_page():
-App.main()
-html =
-"""</p>
-<p id="time">TIME</p>
-<p><button id="reset" onclick="server.reset()">Reset</button>
-"""
-return App.render(html)</p>
+    App.main()
+    html =  &quot;&quot;&quot;
+&lt;p id=&quot;time&quot;&gt;TIME&lt;/p&gt;
+&lt;button id=&quot;reset&quot; onclick=&quot;server.reset()&quot;&gt;Reset&lt;/button&gt;
+&quot;&quot;&quot;
+    return App.render(html)
+</code></pre>
 <details class="source">
 <summary>
 <span>Expand source code</span>
@@ -127,6 +130,7 @@ async def index_page():
 &lt;button id=&#34;reset&#34; onclick=&#34;server.reset()&#34;&gt;Reset&lt;/button&gt;
 &#34;&#34;&#34;
     return App.render(html)
+```
 &#39;&#39;&#39;
 
 from fastapi import FastAPI, Request, Response

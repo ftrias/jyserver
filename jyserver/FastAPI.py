@@ -52,6 +52,7 @@ async def index_page():
 <button id="reset" onclick="server.reset()">Reset</button>
 """
     return App.render(html)
+```
 '''
 
 from fastapi import FastAPI, Request, Response
