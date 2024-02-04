@@ -845,7 +845,7 @@ class JSchain:
                 c.delQuery(idx)
             except queue.Empty:
                 c.log_message("TIMEOUT waiting on: %s", stmt)
-                raise TimeoutError("Timout waiting on: %s" % stmt)
+                raise TimeoutError("Timeout waiting on: %s" % stmt)
             if result["error"] != "":
                 c.log_error("ERROR EVAL %s : %s", result["error"], stmt)
                 raise RuntimeError(result["error"] + ": " + stmt)

@@ -80,7 +80,7 @@ def use(flaskapp):
                     return ''
                 return result
             else:
-                return "GET reqeust not allowed"
+                return "GET request not allowed"
         return context
 
     return decorator
