@@ -4,7 +4,12 @@ Jyserver is a framework for simplifying the creation of font ends for apps and
 kiosks by providing real-time access to the browser's DOM and Javascript from
 the server using Python syntax. It also provides access to the Python code from
 the browser's Javascript. It can be used stand-alone or with other
-frameworks such as Flask, Django, etc.
+frameworks such as:
+
+* Flask
+* Bottle
+* FastAPI
+* Django
 
 jyserver uses Python's dynamic syntax evaluation so that you can write
 Python code that will dynamically be converted to JS and executed on the
@@ -92,6 +97,41 @@ class App():
 def index_page(name=None):
     App.main()
     return App.render(render_template('flask-simple.html')
+```
+
+## FastAPI example
+
+```python
+import jyserver.FastAPI as js
+import time
+
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+
+app = FastAPI(__name__)
+
+@js.use(app)
+class App():
+    def reset(self):
+        self.start0 = time.time()
+        self.js.dom.time.innerHTML = "{:.1f}".format(0)
+
+    @js.task
+    def main(self):
+        self.start0 = time.time()
+        while True:
+            t = "{:.1f}".format(time.time() - self.start0)
+            self.js.dom.time.innerHTML = t
+            time.sleep(0.1)
+
+@app.get('/', response_class=HTMLResponse)
+async def index_page():
+    App.main()
+    html =  """
+<p id="time">TIME</p>
+<button id="reset" onclick="server.reset()">Reset</button>
+"""
+    return App.render(html)
 ```
 
 ## Django example

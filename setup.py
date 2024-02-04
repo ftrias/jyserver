@@ -7,7 +7,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="jyserver",
-    version="0.0.5",
+    version="0.1.0",
     author="Fernando Trias",
     author_email="sub@trias.org",
     description="Web Framework with Pythonic Javascript Syntax",
