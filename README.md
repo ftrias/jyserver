@@ -25,6 +25,14 @@ Tutorial: [Dev.to article](https://dev.to/ftrias/simple-kiosk-framework-in-pytho
 
 Tutorial Flask/Bottle: [Dev.to Flask article](https://dev.to/ftrias/access-js-dom-from-flask-app-using-jyserver-23h9)
 
+The examples below show the same app that displays a running timer. The timer is controlled from the
+server by the main() task, which usually runs on its own thread. DOM items are accessed via the
+`self.js.dom` object using Javascript notation. The app has a button called `reset` that calls a
+server function also called `reset()`.
+
+The main differences in the jyserver code between Flask, Django, Bottle and FastAPI are in the 
+syntax with the decorator `@js.use`. Otherwise, the jyserver code is identical.
+
 ## Standalone Example:
 
 ```python
@@ -45,7 +53,7 @@ class App(Client):
         # reset counter so elapsed time is 0
         self.start0 = time.time()
         # executed on client
-        self.time.innerHTML = "{:.1f}".format(0)
+        self.js.dom.time.innerHTML = "{:.1f}".format(0)
 
     # If there is a "main" function, it gets executed. Program
     # ends when the function ends. If there is no main, then
@@ -57,7 +65,7 @@ class App(Client):
             # get current elapsed time, rounded to 0.1 seconds
             t = "{:.1f}".format(time.time() - self.start0)
             # update the DOM on the client
-            self.time..innerHTML = t
+            self.js.dom.time.innerHTML = t
             time.sleep(0.1)
 
 httpd = Server(App)
@@ -83,89 +91,20 @@ app = Flask(__name__)
 class App():
     def reset(self):
         self.start0 = time.time()
-        self.time.innerHTML = "{:.1f}".format(0)
+        self.js.dom.time.innerHTML = "{:.1f}".format(0)
 
     @js.task
     def main(self):
         self.start0 = time.time()
         while True:
             t = "{:.1f}".format(time.time() - self.start0)
-            self.time.innerHTML = t
+            self.js.dom.time.innerHTML = t
             time.sleep(0.1)
 
 @app.route('/')
 def index_page(name=None):
     App.main()
     return App.render(render_template('flask-simple.html')
-```
-
-## FastAPI example
-
-```python
-import jyserver.FastAPI as js
-import time
-
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
-
-app = FastAPI(__name__)
-
-@js.use(app)
-class App():
-    def reset(self):
-        self.start0 = time.time()
-        self.time.innerHTML = "{:.1f}".format(0)
-
-    @js.task
-    def main(self):
-        self.start0 = time.time()
-        while True:
-            t = "{:.1f}".format(time.time() - self.start0)
-            self.time.innerHTML = t
-            time.sleep(0.1)
-
-@app.get('/', response_class=HTMLResponse)
-async def index_page():
-    App.main()
-    html =  """
-<p id="time">TIME</p>
-<button id="reset" onclick="server.reset()">Reset</button>
-"""
-    return App.render(html)
-```
-
-## Django example
-
-```python
-from django.shortcuts import render
-import jyserver.Django as js
-import time
-
-@js.use
-class App():
-    def reset(self):
-        self.start0 = time.time()
-        self.time.innerHTML = "{:.1f}".format(0)
-
-    @js.task
-    def main(self):
-        self.start0 = time.time()
-        while True:
-            t = "{:.1f}".format(time.time() - self.start0)
-            self.time.innerHTML = t
-            time.sleep(0.1)
-
-def hello_world(request):
-    App.main()
-    return App.render(render(request, 'hello_world.html', {}))
-```
-
-In `urls.py` add this path:
-
-```python
-from jyserver.Django import process
-...
-    url(r'^_process_srv0$', process, name='process'),
 ```
 
 ## Bottle example
@@ -203,6 +142,80 @@ def index():
     return App.render(html)
 
 run(host='localhost', port=8080)
+```
+
+## FastAPI example
+
+```python
+import jyserver.FastAPI as js
+import time
+
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+
+app = FastAPI(__name__)
+
+@js.use(app)
+class App():
+    def reset(self):
+        self.start0 = time.time()
+        self.js.dom.time.innerHTML = "{:.1f}".format(0)
+
+    @js.task
+    def main(self):
+        self.start0 = time.time()
+        while True:
+            t = "{:.1f}".format(time.time() - self.start0)
+            self.js.dom.time.innerHTML = t
+            time.sleep(0.1)
+
+@app.get('/', response_class=HTMLResponse)
+async def index_page():
+    App.main()
+    html =  """
+<p id="time">TIME</p>
+<button id="reset" onclick="server.reset()">Reset</button>
+"""
+    return App.render(html)
+```
+
+## Django example
+
+```python
+from django.http import HttpResponse
+import jyserver.Django as js
+import time
+
+@js.use
+class App():
+    def reset(self):
+        self.start0 = time.time()
+        self.js.dom.time.innerHTML = "{:.1f}".format(0)
+
+    @js.task
+    def main(self):
+        self.start0 = time.time()
+        while True:
+            t = "{:.1f}".format(time.time() - self.start0)
+            self.js.dom.time.innerHTML = t
+            time.sleep(0.1)
+
+def hello_world(request):
+    App.main()
+    html =  """
+<p id="time">WHEN</p>
+<button id="b1" onclick="server.reset()">Reset</button>
+<button id="b2" onclick="server.stop()">Pause</button>
+"""
+    return App.render(HttpResponse(html))
+```
+
+In `urls.py` add this path:
+
+```python
+from jyserver.Django import process
+...
+    url(r'^_process_srv0$', process, name='process'),
 ```
 
 ## Internals

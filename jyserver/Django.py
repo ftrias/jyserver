@@ -87,7 +87,7 @@ def process(request):
 
 def use(appClass):
     '''
-    Link a class to an app object. Pass Flask's `app` object.
+    Link a class to an app object. Pass `app` object.
     '''
     global context
     context = jyserver.ClientContext(appClass)
